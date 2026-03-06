@@ -5,9 +5,8 @@ Each method calls one external vendor agent with an x402 payment token.
 All vendor plan IDs and URLs come from .env — swap in real values at the hackathon.
 """
 
-from utils.payments import call_vendor, _mock_vendor_response
+from utils.payments import call_vendor
 from utils.config import (
-    DEV_MODE,
     WEBSITE_GUY_PLAN_ID, WEBSITE_GUY_URL,
     CREATIVE_LADY_PLAN_ID, CREATIVE_LADY_URL,
     EXA_PLAN_ID, EXA_URL,
@@ -27,9 +26,9 @@ class VendorClient:
         Output: { landing_page_url, sections, status }
         """
         if not WEBSITE_GUY_URL:
-            if DEV_MODE:
-                return _mock_vendor_response("website")
-            return {"status": "skipped", "reason": "WEBSITE_GUY_URL not configured"}
+            raise RuntimeError("WEBSITE_GUY_URL is not configured.")
+        if not WEBSITE_GUY_PLAN_ID:
+            raise RuntimeError("WEBSITE_GUY_PLAN_ID is not configured.")
 
         payload = {
             "client": brief.get("brand"),
@@ -50,9 +49,9 @@ class VendorClient:
         Output: { creatives: [ { headline, body, cta, format } ] }
         """
         if not CREATIVE_LADY_URL:
-            if DEV_MODE:
-                return _mock_vendor_response("creative")
-            return {"status": "skipped", "reason": "CREATIVE_LADY_URL not configured"}
+            raise RuntimeError("CREATIVE_LADY_URL is not configured.")
+        if not CREATIVE_LADY_PLAN_ID:
+            raise RuntimeError("CREATIVE_LADY_PLAN_ID is not configured.")
 
         payload = {
             "brand": brief.get("brand"),
@@ -73,9 +72,9 @@ class VendorClient:
         Output: { insights, competitors, messaging_angles }
         """
         if not EXA_URL:
-            if DEV_MODE:
-                return _mock_vendor_response("research")
-            return {"status": "skipped", "reason": "EXA_URL not configured"}
+            raise RuntimeError("EXA_URL is not configured.")
+        if not EXA_PLAN_ID:
+            raise RuntimeError("EXA_PLAN_ID is not configured.")
 
         payload = {
             "query": (
@@ -96,9 +95,9 @@ class VendorClient:
         Output: { campaign_id, impressions, clicks, status }
         """
         if not ZEROCLICK_URL:
-            if DEV_MODE:
-                return _mock_vendor_response("ads")
-            return {"status": "skipped", "reason": "ZEROCLICK_URL not configured"}
+            raise RuntimeError("ZEROCLICK_URL is not configured.")
+        if not ZEROCLICK_PLAN_ID:
+            raise RuntimeError("ZEROCLICK_PLAN_ID is not configured.")
 
         payload = {
             "brand": brief.get("brand"),

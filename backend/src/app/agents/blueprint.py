@@ -53,68 +53,17 @@ class Blueprint:
 
         return graph
 
-    def _fallback_graph(self, brief: dict) -> AgentGraph:
-        raw_data = {
-            "campaign_id": "fallback-campaign",
-            "brand": brief.get("brand", ""),
-            "goal": brief.get("goal", ""),
-            "total_budget": brief.get("budget", 0),
-            "execution_order": ["ceo", "strategy", "analytics", "budget_manager"],
-            "agents": [
-                {
-                    "id": "ceo",
-                    "name": "CEO Agent",
-                    "icon": "👔",
-                    "level": 1,
-                    "node_type": "orchestrator",
-                    "depends_on": [],
-                    "description": "Coordinates campaign execution and vendors."
-                },
-                {
-                    "id": "strategy",
-                    "name": "Strategy Agent",
-                    "icon": "🎯",
-                    "level": 2,
-                    "node_type": "leaf",
-                    "depends_on": ["ceo"],
-                    "description": "Builds targeting, messaging, and channel strategy."
-                },
-                {
-                    "id": "analytics",
-                    "name": "Analytics Agent",
-                    "icon": "📊",
-                    "level": 2,
-                    "node_type": "leaf",
-                    "depends_on": ["ceo"],
-                    "description": "Tracks campaign performance and ROI."
-                },
-                {
-                    "id": "budget_manager",
-                    "name": "Budget Manager Agent",
-                    "icon": "💰",
-                    "level": 2,
-                    "node_type": "leaf",
-                    "depends_on": ["ceo"],
-                    "description": "Enforces budget constraints and spend allocation."
-                },
-            ],
-        }
-        return self._parse_graph(raw_data, brief)
-
     def create(self, brief: dict) -> AgentGraph:
         if not self.client:
-            return self._fallback_graph(brief)
+            raise RuntimeError("GOOGLE_API_KEY is missing or Gemini client is unavailable.")
 
         system_prompt = self._load_prompt("root_agent_prompt.txt")
         user_message = json.dumps(brief, indent=2)
         full_prompt = f"{system_prompt}\n\nClient Brief:\n{user_message}"
-        try:
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=full_prompt
-            )
-            raw = self._strip_fences(response.text.strip())
-            raw_data = json.loads(raw)
-            return self._parse_graph(raw_data, brief)
-        except Exception:
-            return self._fallback_graph(brief)
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=full_prompt
+        )
+        raw = self._strip_fences(response.text.strip())
+        raw_data = json.loads(raw)
+        return self._parse_graph(raw_data, brief)
