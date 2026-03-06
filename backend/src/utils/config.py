@@ -13,6 +13,7 @@ GOOGLE_API_KEY = (os.getenv("GOOGLE_API_KEY") or "").strip()
 NVM_API_KEY      = (os.getenv("NVM_API_KEY", "") or "").strip()
 NVM_ENVIRONMENT  = (os.getenv("NVM_ENVIRONMENT", "sandbox") or "sandbox").strip()
 NVM_PLAN_ID      = (os.getenv("NVM_PLAN_ID", "") or "").strip()
+NVM_PLAN_ID_2    = (os.getenv("NVM_PLAN_ID_2", "") or "").strip()
 NVM_AGENT_ID     = (os.getenv("NVM_AGENT_ID", "") or "").strip()
 
 # ── Vendors (buyer targets) ──

@@ -54,6 +54,8 @@ class Blueprint:
         if MINDRA_CHILD_NODE_ENABLED:
             self._inject_mindra_content_child(graph)
         if MINDRA_TWITTER_AGENT_ENABLED:
+            self._inject_mindra_twitter_ad_copy_child(graph)
+                self._inject_mindra_twitter_ad_copy_child(graph)
             self._inject_mindra_twitter_child(graph)
 
         return graph
@@ -113,9 +115,8 @@ class Blueprint:
             low = f"{node.id} {node.name}".lower()
             if "analytics" in low and child_node_id not in node.depends_on:
                 node.depends_on.append(child_node_id)
-
-    def _inject_mindra_twitter_child(self, graph: AgentGraph) -> None:
-        """Ensure there is a Twitter posting node driven by Mindra after creatives are ready."""
+    def _inject_mindra_twitter_ad_copy_child(self, graph: AgentGraph) -> None:
+        """Create a dedicated Twitter ad-copy node based on generated creative content."""
         creative_node = None
         for node in graph.nodes.values():
             low = f"{node.id} {node.name}".lower()
@@ -125,6 +126,59 @@ class Blueprint:
 
         if creative_node is None:
             return
+
+        copy_node = None
+        for node in graph.nodes.values():
+            low = f"{node.id} {node.name}".lower()
+            if "twitter ad copy" in low or "twitter_ad_copy" in low:
+                copy_node = node
+                break
+
+        copy_node_id = "mindra_twitter_ad_copy"
+        if copy_node is None:
+            copy_node = AgentNode(
+                id=copy_node_id,
+                    depends_on=[dependency_id],
+                icon="AI",
+                level=3,
+                node_type=NodeType.LEAF,
+                depends_on=[creative_node.id],
+                description=(
+                    "Transform creative outputs into high-converting, ad-style Twitter/X copy "
+                    "variants tailored for campaign goals."
+                ),
+                input=creative_node.input,
+            )
+                if dependency_id not in twitter_node.depends_on:
+                    twitter_node.depends_on.append(dependency_id)
+            copy_node.name = "Twitter Ad Copy Agent"
+            copy_node.level = max(3, copy_node.level)
+            if creative_node.id not in copy_node.depends_on:
+                copy_node.depends_on.append(creative_node.id)
+            copy_node_id = copy_node.id
+
+        if copy_node_id not in graph.execution_order:
+            if creative_node.id in graph.execution_order:
+                idx = graph.execution_order.index(creative_node.id)
+                graph.execution_order.insert(idx + 1, copy_node_id)
+            else:
+                graph.execution_order.append(copy_node_id)
+
+    def _inject_mindra_twitter_child(self, graph: AgentGraph) -> None:
+        """Ensure there is a Twitter posting node driven by Mindra after creatives are ready."""
+        creative_node = None
+        copy_node = None
+        for node in graph.nodes.values():
+            low = f"{node.id} {node.name}".lower()
+            if "creative" in low or "content creator" in low:
+                creative_node = node
+            if "twitter ad copy" in low or "twitter_ad_copy" in low:
+                copy_node = node
+
+        if creative_node is None:
+            return
+
+        dependency_id = copy_node.id if copy_node is not None else creative_node.id
 
         twitter_node = None
         for node in graph.nodes.values():
@@ -141,7 +195,7 @@ class Blueprint:
                 icon="X",
                 level=3,
                 node_type=NodeType.LEAF,
-                depends_on=[creative_node.id],
+                depends_on=[dependency_id],
                 description=(
                     "Create one campaign tweet from creative outputs and post via connected "
                     "Twitter/X integration using Mindra workflow tools."
@@ -152,8 +206,8 @@ class Blueprint:
         else:
             twitter_node.name = "Twitter Agent"
             twitter_node.level = max(3, twitter_node.level)
-            if creative_node.id not in twitter_node.depends_on:
-                twitter_node.depends_on.append(creative_node.id)
+            if dependency_id not in twitter_node.depends_on:
+                twitter_node.depends_on.append(dependency_id)
             twitter_node_id = twitter_node.id
 
         if twitter_node_id not in graph.execution_order:

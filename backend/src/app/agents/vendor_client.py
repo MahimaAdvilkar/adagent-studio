@@ -122,16 +122,25 @@ def _mindra_create_and_post_twitter(brief: dict) -> dict:
 
     creatives = brief.get("creatives", []) if isinstance(brief.get("creatives"), list) else []
     first_creative = creatives[0] if creatives and isinstance(creatives[0], dict) else {}
+    selected_tweet = str(brief.get("selected_tweet", "")).strip()
     headline = str(first_creative.get("headline", "")).strip()
     body = str(first_creative.get("body", "")).strip()
 
-    task = (
-        f"For brand '{brief.get('brand', '')}', create one concise Twitter/X post for goal "
-        f"'{brief.get('goal', '')}' targeting '{brief.get('audience', '')}'. "
-        "Use the provided creative context if available. Then publish it using the connected "
-        "Twitter/X integration tool. Do not stop at drafting. Execute the posting tool. "
-        "Return strict JSON with keys: post_content, post_url, posted (true/false), reason."
-    )
+    if selected_tweet:
+        task = (
+            "Publish this exact Twitter/X ad post using the connected posting tool. "
+            f"Post text: {selected_tweet} "
+            "Do not rewrite unless it violates platform policy. Return strict JSON with keys: "
+            "post_content, post_url, posted (true/false), reason."
+        )
+    else:
+        task = (
+            f"For brand '{brief.get('brand', '')}', create one concise Twitter/X ad post for goal "
+            f"'{brief.get('goal', '')}' targeting '{brief.get('audience', '')}'. "
+            "Use the provided creative context if available. Then publish it using the connected "
+            "Twitter/X integration tool. Do not stop at drafting. Execute the posting tool. "
+            "Return strict JSON with keys: post_content, post_url, posted (true/false), reason."
+        )
 
     payload = {
         "task": task,
@@ -143,6 +152,7 @@ def _mindra_create_and_post_twitter(brief: dict) -> dict:
                 "headline": headline,
                 "body": body,
             },
+            "selected_tweet": selected_tweet,
         },
     }
     headers = {
@@ -612,6 +622,41 @@ def _extract_twitter_result(stream_result: dict) -> tuple[str, str, bool, str]:
 
 
 class VendorClient:
+
+    @staticmethod
+    def create_twitter_ad_copy(brief: dict) -> dict:
+        """Generate ad-style Twitter copy variants using upstream creative data."""
+        creatives = brief.get("creatives", []) if isinstance(brief.get("creatives"), list) else []
+        candidates: list[str] = []
+
+        for creative in creatives[:3]:
+            if not isinstance(creative, dict):
+                continue
+            headline = str(creative.get("headline", "")).strip()
+            body = str(creative.get("body", "")).strip()
+            cta = str(creative.get("cta", "Sign up free today")).strip() or "Sign up free today"
+
+            # Build ad copy from the strongest headline/body signals and keep it tweet-length.
+            hook = headline if headline else "SF founders"
+            body_line = body.split("\n")[0].strip() if body else "Scale faster with smarter tooling."
+            text = f"{hook}. {body_line} {cta}. #TechFounders #StartupGrowth"
+            if len(text) > 270:
+                text = text[:267].rstrip() + "..."
+            candidates.append(text)
+
+        if not candidates:
+            fallback = (
+                f"SF founders: move faster with {brief.get('brand', 'TechStartup X')}. "
+                "Cut tool chaos, scale smarter, and start free today. #TechFounders #StartupGrowth"
+            )
+            candidates = [fallback]
+
+        return {
+            "status": "done",
+            "tweet_candidates": candidates,
+            "selected_tweet": candidates[0],
+            "source": "mindra_creative_reference",
+        }
 
     # ── Website Guy ($3) ──────────────────────────────────────────────────────
 

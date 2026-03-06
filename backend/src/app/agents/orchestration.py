@@ -12,6 +12,7 @@ VENDOR_COSTS = {
     "exa": 0.5,
     "zeroclick": 2.0,
     "twitter": 0.0,
+    "twitter_ad_copy": 0.0,
 }
 
 
@@ -62,7 +63,8 @@ def _vendor_statuses(graph: AgentGraph) -> list[dict[str, str]]:
         ("Exa (Research)", ["exa", "research"]),
         ("Website Guy", ["website"]),
         ("Creative Lady", ["creative"]),
-        ("Twitter Agent", ["twitter"]),
+        ("Twitter Ad Copy", ["twitter_ad_copy"]),
+        ("Twitter Agent", ["mindra_twitter_agent"]),
         ("ZeroClick (Ads)", ["zeroclick", "ads", "media"]),
     ]
 
@@ -85,7 +87,8 @@ def _transactions(graph: AgentGraph, budget: float) -> tuple[list[dict[str, Any]
     vendor_nodes = [
         ("Website Guy", ["website"], VENDOR_COSTS["website_guy"]),
         ("Creative Lady", ["creative"], VENDOR_COSTS["creative_lady"]),
-        ("Twitter Agent", ["twitter"], VENDOR_COSTS["twitter"]),
+        ("Twitter Ad Copy Agent", ["twitter_ad_copy"], VENDOR_COSTS["twitter_ad_copy"]),
+        ("Twitter Agent", ["mindra_twitter_agent"], VENDOR_COSTS["twitter"]),
         ("Exa", ["exa", "research"], VENDOR_COSTS["exa"]),
         ("ZeroClick", ["zeroclick", "ads", "media"], VENDOR_COSTS["zeroclick"]),
     ]
@@ -133,6 +136,7 @@ def _strategy_output(graph: AgentGraph, brief: dict[str, Any]) -> dict[str, Any]
         "budget_split": {
             "website": VENDOR_COSTS["website_guy"],
             "creative": VENDOR_COSTS["creative_lady"],
+            "twitter_ad_copy": VENDOR_COSTS["twitter_ad_copy"],
             "twitter": VENDOR_COSTS["twitter"],
             "research": VENDOR_COSTS["exa"],
             "ads": VENDOR_COSTS["zeroclick"],
@@ -170,6 +174,7 @@ def workflow_preview(brief: dict[str, Any]) -> dict[str, Any]:
         "budget_split": {
             "website": VENDOR_COSTS["website_guy"],
             "creative": VENDOR_COSTS["creative_lady"],
+            "twitter_ad_copy": VENDOR_COSTS["twitter_ad_copy"],
             "twitter": VENDOR_COSTS["twitter"],
             "research": VENDOR_COSTS["exa"],
             "ads": VENDOR_COSTS["zeroclick"],
@@ -195,12 +200,15 @@ def workflow_preview(brief: dict[str, Any]) -> dict[str, Any]:
             {"label": "Exa (Research)", "status": "Pending"},
             {"label": "Website Guy", "status": "Pending"},
             {"label": "Creative Lady", "status": "Pending"},
+            {"label": "Twitter Ad Copy Agent", "status": "Pending"},
+            {"label": "Twitter Agent", "status": "Pending"},
             {"label": "ZeroClick (Ads)", "status": "Pending"},
         ],
         "transactions": [
             {"vendor": "Client Payment", "amount": round(budget, 2), "status": "Incoming"},
             {"vendor": "Website Guy", "amount": VENDOR_COSTS["website_guy"], "status": "Planned"},
             {"vendor": "Creative Lady", "amount": VENDOR_COSTS["creative_lady"], "status": "Planned"},
+            {"vendor": "Twitter Ad Copy Agent", "amount": VENDOR_COSTS["twitter_ad_copy"], "status": "Planned"},
             {"vendor": "Twitter Agent", "amount": VENDOR_COSTS["twitter"], "status": "Planned"},
             {"vendor": "Exa", "amount": VENDOR_COSTS["exa"], "status": "Planned"},
             {"vendor": "ZeroClick", "amount": VENDOR_COSTS["zeroclick"], "status": "Planned"},
@@ -211,7 +219,7 @@ def workflow_preview(brief: dict[str, Any]) -> dict[str, Any]:
         "buy_sell_note": buy_sell_note,
         "switch_state": "HOLD",
         "switch_note": "Workflow ready. Run campaign to execute agents.",
-        "transaction_count": 6,
+        "transaction_count": 7,
     }
 
 
