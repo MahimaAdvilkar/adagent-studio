@@ -11,7 +11,7 @@ from utils.config import NVM_API_KEY, NVM_ENVIRONMENT, NVM_PLAN_ID, NVM_AGENT_ID
 # Lazy import — payments-py is optional; app still boots if unavailable
 try:
     from payments_py import Payments, PaymentOptions
-    from payments_py.x402.types import X402PaymentRequired, X402Scheme
+    from payments_py.x402.types import X402PaymentRequired, X402Scheme, X402Resource, X402SchemeExtra
     _NVM_AVAILABLE = True
 except ImportError:
     _NVM_AVAILABLE = False
@@ -31,15 +31,26 @@ def _get_client():
     )
 
 
-def _build_payment_required(plan_id: str):
-    """Build the X402PaymentRequired object describing our plan."""
+def _build_payment_required(plan_id: str, resource_url: str, http_verb: str = "POST"):
+    """Build the X402PaymentRequired object describing our protected endpoint."""
+    scheme_extra = X402SchemeExtra(
+        version="1",
+        agent_id=NVM_AGENT_ID or None,
+        http_verb=http_verb,
+    )
     return X402PaymentRequired(
         x402_version=2,
+        resource=X402Resource(
+            url=resource_url,
+            description="AdAgent Studio paid campaign execution endpoint",
+            mime_type="application/json",
+        ),
         accepts=[
             X402Scheme(
                 scheme="nvm:erc4337",
                 network=_NETWORK,
                 plan_id=plan_id,
+                extra=scheme_extra,
             )
         ],
         extensions={},
@@ -96,7 +107,7 @@ def _mock_vendor_response(vendor_url: str) -> dict:
 
 # ── SELLER SIDE ───────────────────────────────────────────────────────────────
 
-def verify_payment_token(token: str) -> bool:
+def verify_payment_token(token: str, resource_url: str = "", http_verb: str = "POST") -> bool:
     """
     Verify + settle an incoming x402 payment token from a client.
     Returns True if valid and credits were burnt, or True in dev if NVM not set.
@@ -113,7 +124,11 @@ def verify_payment_token(token: str) -> bool:
         return False
     try:
         p = _get_client()
-        payment_required = _build_payment_required(NVM_PLAN_ID)
+        payment_required = _build_payment_required(
+            NVM_PLAN_ID,
+            resource_url=resource_url or "https://adagent-studio-seven.vercel.app/api/run-campaign",
+            http_verb=http_verb,
+        )
 
         # First verify (dry-run, doesn't burn credits)
         verification = p.facilitator.verify_permissions(

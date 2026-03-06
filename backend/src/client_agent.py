@@ -6,10 +6,12 @@ POST /api/run-campaign
 """
 
 import os
+import time
 from pathlib import Path
 import requests
 from dotenv import load_dotenv
 from payments_py import Payments, PaymentOptions
+from payments_py.x402.types import X402PaymentRequired, X402Scheme, X402Resource, X402SchemeExtra
 
 
 def main() -> None:
@@ -38,14 +40,69 @@ def main() -> None:
         )
     )
 
-    token_result = p.x402.get_x402_access_token(
-        plan_id=nvm_plan_id,
-        agent_id=nvm_agent_id or None,
-        redemption_limit=1,
-    )
+    # Try to subscribe this buyer to the seller plan before requesting token.
+    # Some sandbox accounts fail here if wallet/address is not configured yet.
+    try:
+        p.plans.order_plan(plan_id=nvm_plan_id)
+    except Exception as e:
+        print("order_plan warning:", e)
+        print("continuing with token generation...")
+
+    token_result = None
+    last_err = None
+    for attempt in range(1, 4):
+        try:
+            token_result = p.x402.get_x402_access_token(
+                plan_id=nvm_plan_id,
+                agent_id=nvm_agent_id or None,
+                redemption_limit=1,
+            )
+            break
+        except Exception as e:
+            last_err = e
+            print(f"token attempt {attempt}/3 failed:", e)
+            if attempt < 3:
+                time.sleep(2 * attempt)
+    if token_result is None:
+        raise SystemExit(f"Failed to generate x402 access token after retries: {last_err}")
+
     token = token_result.get("accessToken", "")
     if not token:
         raise SystemExit("Failed to generate x402 access token.")
+    print("token generated:", bool(token), "len:", len(token))
+
+    # Local diagnostics: verify token against the same plan definition.
+    try:
+        network = "eip155:84532" if nvm_environment == "sandbox" else "eip155:8453"
+        endpoint_url = endpoint
+        payment_required = X402PaymentRequired(
+            x402_version=2,
+            resource=X402Resource(
+                url=endpoint_url,
+                description="AdAgent Studio paid campaign execution endpoint",
+                mime_type="application/json",
+            ),
+            accepts=[
+                X402Scheme(
+                    scheme="nvm:erc4337",
+                    network=network,
+                    plan_id=nvm_plan_id,
+                    extra=X402SchemeExtra(
+                        version="1",
+                        agent_id=nvm_agent_id or None,
+                        http_verb="POST",
+                    ),
+                )
+            ],
+            extensions={},
+        )
+        verification = p.facilitator.verify_permissions(
+            payment_required=payment_required,
+            x402_access_token=token,
+        )
+        print("verify_permissions.is_valid:", verification.is_valid)
+    except Exception as e:
+        print("verify_permissions warning:", e)
 
     payload = {
         "brand": "TechStartup X",
