@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from app.agents.blueprint import Blueprint
+from app.agents.executor import execute_graph
 from app.models.agent_graph import AgentGraph
 from utils.payments import verify_payment_token
 
@@ -49,18 +50,33 @@ async def run_campaign(brief: CampaignBrief, request: Request):
     # Verify payment token
     token = request.headers.get("payment-signature", "")
     if not verify_payment_token(token):
-        return HTTPException(
+        raise HTTPException(
             status_code=402,
             detail="Payment required. Send x402 token in 'payment-signature' header."
         )
 
     try:
+        # Step 1: Blueprint — LLM designs the agent graph
         graph = blueprint.create(brief.model_dump())
+
+        # Step 2: Execute — run all agents in dependency order
+        graph = execute_graph(graph)
+
         return {
-            "status": "accepted",
+            "status": "complete",
             "campaign_id": graph.campaign_id,
-            "message": "Campaign blueprint created. Agents are queued for execution.",
-            "graph_summary": graph.summary(),
+            "brand": graph.brand,
+            "goal": graph.goal,
+            "summary": graph.summary(),
+            "agents": {
+                node_id: {
+                    "name": node.name,
+                    "status": node.status,
+                    "output": node.output,
+                    "duration_seconds": node.duration_seconds,
+                }
+                for node_id, node in graph.nodes.items()
+            },
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

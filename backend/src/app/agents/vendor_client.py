@@ -82,10 +82,10 @@ class VendorClient:
     # ── ZeroClick ($2) ────────────────────────────────────────────────────────
 
     @staticmethod
-    def place_ads(brief: dict, creatives: dict) -> dict:
+    def place_ads(brief: dict) -> dict:
         """
         Send creatives to ZeroClick for ad placement + A/B testing.
-        Input: campaign brief + creatives from Creative Lady
+        The brief should contain upstream creative outputs merged in.
         Output: { campaign_id, impressions, clicks, status }
         """
         if not ZEROCLICK_URL:
@@ -95,7 +95,7 @@ class VendorClient:
             "brand": brief.get("brand"),
             "goal": brief.get("goal"),
             "audience": brief.get("audience"),
-            "creatives": creatives.get("creatives", []),
+            "creatives": brief.get("creatives", []),
             "budget": brief.get("budget", 15),
         }
         return call_vendor(ZEROCLICK_URL, ZEROCLICK_PLAN_ID, payload)
