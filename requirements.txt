@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+python-dotenv
+google-genai
+payments-py
+requests
+pydantic
