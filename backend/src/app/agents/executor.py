@@ -31,6 +31,7 @@ VENDOR_DISPATCH = {
     "zeroclick":       VendorClient.place_ads,
     "media":           VendorClient.place_ads,
     "ads":             VendorClient.place_ads,
+    "twitter":         VendorClient.create_and_post_twitter,
 }
 
 

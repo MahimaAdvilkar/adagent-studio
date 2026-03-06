@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.models.agent_graph import AgentGraph, AgentStatus
+from utils.payments import nevermined_wallet_snapshot
 
 
 VENDOR_COSTS = {
@@ -10,7 +11,35 @@ VENDOR_COSTS = {
     "creative_lady": 2.0,
     "exa": 0.5,
     "zeroclick": 2.0,
+    "twitter": 0.0,
 }
+
+
+def _review_prompt() -> dict[str, Any]:
+    return {
+        "title": "Leave a review",
+        "message": "Help other users by sharing your experience with this campaign.",
+        "cta_label": "Leave Review",
+        "endpoint": "/api/trust-net/reviews",
+        "method": "POST",
+        "required_fields": [
+            "agent_id",
+            "reviewer_address",
+            "verification_tx",
+            "score",
+            "comment",
+        ],
+        "optional_fields": [
+            "score_accuracy",
+            "score_speed",
+            "score_value",
+            "score_reliability",
+        ],
+        "notes": [
+            "verification_tx must be a real Base Sepolia burn transaction hash.",
+            "Reviews are free and do not require an x402 token.",
+        ],
+    }
 
 
 def _to_text(value: Any, fallback: str = "") -> str:
@@ -33,6 +62,7 @@ def _vendor_statuses(graph: AgentGraph) -> list[dict[str, str]]:
         ("Exa (Research)", ["exa", "research"]),
         ("Website Guy", ["website"]),
         ("Creative Lady", ["creative"]),
+        ("Twitter Agent", ["twitter"]),
         ("ZeroClick (Ads)", ["zeroclick", "ads", "media"]),
     ]
 
@@ -55,6 +85,7 @@ def _transactions(graph: AgentGraph, budget: float) -> tuple[list[dict[str, Any]
     vendor_nodes = [
         ("Website Guy", ["website"], VENDOR_COSTS["website_guy"]),
         ("Creative Lady", ["creative"], VENDOR_COSTS["creative_lady"]),
+        ("Twitter Agent", ["twitter"], VENDOR_COSTS["twitter"]),
         ("Exa", ["exa", "research"], VENDOR_COSTS["exa"]),
         ("ZeroClick", ["zeroclick", "ads", "media"], VENDOR_COSTS["zeroclick"]),
     ]
@@ -102,6 +133,7 @@ def _strategy_output(graph: AgentGraph, brief: dict[str, Any]) -> dict[str, Any]
         "budget_split": {
             "website": VENDOR_COSTS["website_guy"],
             "creative": VENDOR_COSTS["creative_lady"],
+            "twitter": VENDOR_COSTS["twitter"],
             "research": VENDOR_COSTS["exa"],
             "ads": VENDOR_COSTS["zeroclick"],
         },
@@ -111,7 +143,7 @@ def _strategy_output(graph: AgentGraph, brief: dict[str, Any]) -> dict[str, Any]
 def _switching_signal(graph: AgentGraph) -> tuple[str, str]:
     for node in graph.nodes.values():
         if node.status == AgentStatus.FAILED:
-            return "SWITCH", f"{node.name} failed. Check configuration or provider availability."
+            return "SWITCH", f"{node.name} failed. Switching to internal backup route."
     return "HOLD", "All core agents are healthy."
 
 
@@ -138,6 +170,7 @@ def workflow_preview(brief: dict[str, Any]) -> dict[str, Any]:
         "budget_split": {
             "website": VENDOR_COSTS["website_guy"],
             "creative": VENDOR_COSTS["creative_lady"],
+            "twitter": VENDOR_COSTS["twitter"],
             "research": VENDOR_COSTS["exa"],
             "ads": VENDOR_COSTS["zeroclick"],
         },
@@ -146,9 +179,17 @@ def workflow_preview(brief: dict[str, Any]) -> dict[str, Any]:
     margin = round(budget - spend, 2)
     roi = f"{(margin / spend):.2f}x" if spend > 0 else "—"
     buy_sell, buy_sell_note = _trading_signal("HOLD", margin)
+    wallet = nevermined_wallet_snapshot()
+    finance = {"total_spend": round(spend, 2), "margin": margin}
+    if wallet.get("available"):
+        finance["wallet_value"] = wallet.get("wallet_value")
+        finance["wallet_credits"] = wallet.get("wallet_credits")
+        finance["price_per_credit"] = wallet.get("price_per_credit")
+
     return {
         "status": "preview",
         "brand": _to_text(brief.get("brand"), "Unknown brand"),
+        "review_prompt": _review_prompt(),
         "strategy": strategy,
         "vendor_statuses": [
             {"label": "Exa (Research)", "status": "Pending"},
@@ -160,16 +201,17 @@ def workflow_preview(brief: dict[str, Any]) -> dict[str, Any]:
             {"vendor": "Client Payment", "amount": round(budget, 2), "status": "Incoming"},
             {"vendor": "Website Guy", "amount": VENDOR_COSTS["website_guy"], "status": "Planned"},
             {"vendor": "Creative Lady", "amount": VENDOR_COSTS["creative_lady"], "status": "Planned"},
+            {"vendor": "Twitter Agent", "amount": VENDOR_COSTS["twitter"], "status": "Planned"},
             {"vendor": "Exa", "amount": VENDOR_COSTS["exa"], "status": "Planned"},
             {"vendor": "ZeroClick", "amount": VENDOR_COSTS["zeroclick"], "status": "Planned"},
         ],
-        "finance": {"total_spend": round(spend, 2), "margin": margin},
+        "finance": finance,
         "metrics": {"roi": roi, "clicks": "—", "conversions": "—"},
         "buy_sell_signal": buy_sell,
         "buy_sell_note": buy_sell_note,
         "switch_state": "HOLD",
         "switch_note": "Workflow ready. Run campaign to execute agents.",
-        "transaction_count": 5,
+        "transaction_count": 6,
     }
 
 
@@ -194,18 +236,25 @@ def build_campaign_response(graph: AgentGraph, brief: dict[str, Any]) -> dict[st
 
     switch_state, switch_note = _switching_signal(graph)
     buy_sell, buy_sell_note = _trading_signal(switch_state, margin)
+    wallet = nevermined_wallet_snapshot()
+    finance = {"total_spend": spend, "margin": margin}
+    if wallet.get("available"):
+        finance["wallet_value"] = wallet.get("wallet_value")
+        finance["wallet_credits"] = wallet.get("wallet_credits")
+        finance["price_per_credit"] = wallet.get("price_per_credit")
 
     return {
         "status": "complete",
         "campaign_id": graph.campaign_id,
         "brand": graph.brand,
         "goal": graph.goal,
+        "review_prompt": _review_prompt(),
         "summary": graph.summary(),
         "strategy": _strategy_output(graph, brief),
         "vendor_statuses": _vendor_statuses(graph),
         "transactions": transactions,
         "transaction_count": len(transactions),
-        "finance": {"total_spend": spend, "margin": margin},
+        "finance": finance,
         "metrics": {"roi": roi, "clicks": clicks, "conversions": conversions},
         "buy_sell_signal": buy_sell,
         "buy_sell_note": buy_sell_note,
