@@ -60,6 +60,11 @@ class AgentNode(BaseModel):
         self.output = {"error": error}
         self.completed_at = datetime.now(timezone.utc)
 
+    def mark_skipped(self, reason: str = "") -> None:
+        self.status = AgentStatus.SKIPPED
+        self.output = {"skipped": True, "reason": reason}
+        self.completed_at = datetime.now(timezone.utc)
+
     @property
     def duration_seconds(self) -> Optional[float]:
         if self.started_at and self.completed_at:
@@ -92,18 +97,20 @@ class AgentGraph(BaseModel):
     def get_node(self, node_id: str) -> Optional[AgentNode]:
         return self.nodes.get(node_id)
 
+    _RESOLVED = {AgentStatus.DONE, AgentStatus.FAILED, AgentStatus.SKIPPED}
+
     def get_ready_nodes(self) -> list[AgentNode]:
-        """Return all PENDING nodes whose dependencies are all DONE."""
+        """Return PENDING nodes whose dependencies are all resolved (done/failed/skipped)."""
         ready = []
         for node in self.nodes.values():
             if node.status != AgentStatus.PENDING:
                 continue
-            deps_done = all(
-                self.nodes[dep].status == AgentStatus.DONE
+            deps_resolved = all(
+                self.nodes[dep].status in self._RESOLVED
                 for dep in node.depends_on
                 if dep in self.nodes
             )
-            if deps_done:
+            if deps_resolved:
                 ready.append(node)
         return ready
 
