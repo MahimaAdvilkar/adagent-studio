@@ -47,15 +47,6 @@ async function postJson(endpoint: string, payload: CampaignBrief): Promise<Campa
   return (await response.json()) as CampaignApiResponse;
 }
 
-export async function runCampaign(brief: CampaignBrief): Promise<CampaignApiResponse> {
-  try {
-    return await postJson("/run-campaign", brief);
-  } catch (error) {
-    const apiError = error as ApiError;
-    if (apiError.status !== 402 && apiError.status !== 404) {
-      throw error;
-    }
-  }
-
-  return postJson("/createblueprint", brief);
+export async function runMindraCampaign(brief: CampaignBrief): Promise<CampaignApiResponse> {
+  return postJson("/mindra/run", brief);
 }
