@@ -7,8 +7,15 @@ BUY side:  AdAgent Studio generates token for Creative Lady → calls their endp
 
 import os
 import requests
-from payments_py import Payments, PaymentOptions
 from dotenv import load_dotenv
+
+try:
+    from payments_py import Payments, PaymentOptions
+except Exception:
+    if __name__ == "__main__":
+        raise SystemExit("payments_py is not installed. Install deps before running this script.")
+    import pytest
+    pytest.skip("payments_py is not installed; skipping integration script.", allow_module_level=True)
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"), override=True)
 

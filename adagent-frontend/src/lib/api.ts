@@ -52,10 +52,14 @@ export async function runCampaign(brief: CampaignBrief): Promise<CampaignApiResp
     return await postJson("/run-campaign", brief);
   } catch (error) {
     const apiError = error as ApiError;
-    if (apiError.status !== 402 && apiError.status !== 404) {
+    if (apiError.status !== 402 && apiError.status !== 404 && apiError.status !== 500) {
       throw error;
     }
   }
 
-  return postJson("/createblueprint", brief);
+  try {
+    return await postJson("/workflow/preview", brief);
+  } catch {
+    return postJson("/createblueprint", brief);
+  }
 }

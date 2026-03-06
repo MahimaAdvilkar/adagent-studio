@@ -24,7 +24,7 @@ def main() -> None:
         if env_path.exists():
             load_dotenv(dotenv_path=env_path, override=True)
 
-    nvm_api_key = (os.getenv("NVM_API_KEY") or "").strip()
+    nvm_api_key = (os.getenv("NVM_BUYER_API_KEY") or os.getenv("NVM_API_KEY") or "").strip()
     nvm_environment = (os.getenv("NVM_ENVIRONMENT", "sandbox") or "sandbox").strip()
     nvm_plan_id = (os.getenv("NVM_PLAN_ID") or "").strip()
     nvm_agent_id = (os.getenv("NVM_AGENT_ID") or "").strip()
@@ -40,29 +40,88 @@ def main() -> None:
         )
     )
 
-    # Try to subscribe this buyer to the seller plan before requesting token.
-    # Some sandbox accounts fail here if wallet/address is not configured yet.
-    try:
-        p.plans.order_plan(plan_id=nvm_plan_id)
-    except Exception as e:
-        print("order_plan warning:", e)
-        print("continuing with token generation...")
+    # Optional: subscribe buyer to the seller plan before token generation.
+    # Default is OFF because sandbox order API can hang/fail intermittently.
+    order_first = (os.getenv("ORDER_PLAN_FIRST", "false") or "false").strip().lower() == "true"
+    if order_first:
+        try:
+            p.plans.order_plan(plan_id=nvm_plan_id)
+        except Exception as e:
+            print("order_plan warning:", e)
+            print("continuing with token generation...")
+
+    def _extract_agent_id(plan_info) -> str:
+        if isinstance(plan_info, dict):
+            return (
+                str(plan_info.get("agentId") or plan_info.get("agent_id") or "").strip()
+                or str((plan_info.get("agent") or {}).get("id") or "").strip()
+            )
+
+        agent_id = getattr(plan_info, "agentId", None) or getattr(plan_info, "agent_id", None)
+        if agent_id:
+            return str(agent_id).strip()
+
+        agent_obj = getattr(plan_info, "agent", None)
+        if agent_obj:
+            nested = getattr(agent_obj, "id", None)
+            if nested:
+                return str(nested).strip()
+        return ""
+
+    # If agent_id not set, try to infer it from the plan.
+    if not nvm_agent_id:
+        try:
+            plan_info = p.plans.get_plan(plan_id=nvm_plan_id)
+            inferred_agent_id = _extract_agent_id(plan_info)
+            if inferred_agent_id:
+                nvm_agent_id = inferred_agent_id
+                print("inferred NVM_AGENT_ID from plan:", nvm_agent_id)
+        except Exception as e:
+            print("plan lookup warning:", e)
 
     token_result = None
     last_err = None
+
+    # Try multiple agent-id variants because plan-agent association can be strict.
+    candidate_agent_ids = []
+    if nvm_agent_id:
+        candidate_agent_ids.append(nvm_agent_id)
+    candidate_agent_ids.append(None)
+
     for attempt in range(1, 4):
-        try:
-            token_result = p.x402.get_x402_access_token(
-                plan_id=nvm_plan_id,
-                agent_id=nvm_agent_id or None,
-                redemption_limit=1,
-            )
+        for candidate_agent_id in candidate_agent_ids:
+            try:
+                token_kwargs = {
+                    "plan_id": nvm_plan_id,
+                    "redemption_limit": 1,
+                }
+                if candidate_agent_id:
+                    token_kwargs["agent_id"] = candidate_agent_id
+
+                token_result = p.x402.get_x402_access_token(**token_kwargs)
+                if candidate_agent_id != nvm_agent_id:
+                    nvm_agent_id = candidate_agent_id or ""
+                break
+            except Exception as e:
+                last_err = e
+                print(
+                    f"token attempt {attempt}/3 with agent_id={candidate_agent_id or '<none>'} failed:",
+                    e,
+                )
+
+        if token_result is not None:
             break
-        except Exception as e:
-            last_err = e
-            print(f"token attempt {attempt}/3 failed:", e)
-            if attempt < 3:
-                time.sleep(2 * attempt)
+
+        # Common sandbox fix: subscribe buyer to plan before requesting x402 token.
+        if "not associated to the agent" in str(last_err).lower():
+            try:
+                print("trying order_plan(...) to establish association before next retry...")
+                p.plans.order_plan(plan_id=nvm_plan_id)
+            except Exception as order_err:
+                print("order_plan retry warning:", order_err)
+
+        if attempt < 3:
+            time.sleep(2 * attempt)
     if token_result is None:
         raise SystemExit(f"Failed to generate x402 access token after retries: {last_err}")
 
