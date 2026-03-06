@@ -1,7 +1,10 @@
 from dotenv import load_dotenv
+from pathlib import Path
 import os
 
-load_dotenv()
+# Walk up: config.py → utils/ → src/ → backend/ → find .env
+_env_path = Path(__file__).parent.parent.parent / ".env"
+load_dotenv(dotenv_path=_env_path, override=True)
 
 # ── Google ──
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -26,3 +29,5 @@ EXA_URL               = os.getenv("EXA_URL", "")
 
 ZEROCLICK_PLAN_ID     = os.getenv("ZEROCLICK_PLAN_ID", "")
 ZEROCLICK_URL         = os.getenv("ZEROCLICK_URL", "")
+
+DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"

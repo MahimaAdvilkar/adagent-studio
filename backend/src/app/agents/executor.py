@@ -116,6 +116,16 @@ def execute_graph(graph: AgentGraph) -> AgentGraph:
             break
 
         for node in ready_nodes:
+            # Skip if any upstream dep failed
+            failed_deps = [
+                dep_id for dep_id in node.depends_on
+                if graph.get_node(dep_id) and graph.get_node(dep_id).status == AgentStatus.FAILED
+            ]
+            if failed_deps:
+                node.mark_skipped(f"upstream failed: {', '.join(failed_deps)}")
+                print(f"[Executor]   ⚠ {node.name} skipped (upstream failed)")
+                continue
+
             print(f"[Executor] Running: {node.icon} {node.name} (level {node.level})")
             node.mark_running()
 

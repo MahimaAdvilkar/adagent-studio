@@ -6,7 +6,7 @@ Buyer side   — generates tokens to pay vendors (Website Guy, Creative Lady, et
 """
 
 import requests
-from utils.config import NVM_API_KEY, NVM_ENVIRONMENT, NVM_PLAN_ID, NVM_AGENT_ID
+from utils.config import NVM_API_KEY, NVM_ENVIRONMENT, NVM_PLAN_ID, NVM_AGENT_ID, DEV_MODE
 
 # Lazy import — payments-py is optional; app still boots if unavailable
 try:
@@ -44,6 +44,54 @@ def _build_payment_required(plan_id: str):
         ],
         extensions={},
     )
+
+
+# ── DEV-MODE MOCKS ───────────────────────────────────────────────────────────
+
+_DEV_MOCKS = {
+    "creative": {
+        "status": "ok",
+        "creatives": [
+            {"headline": "Join the Future of Tech", "body": "Sign up today and get early access.", "cta": "Sign Up Free", "format": "banner ad"},
+            {"headline": "Built for Tech Founders", "body": "Tools that scale with your vision.", "cta": "Get Started", "format": "native ad"},
+        ],
+        "_dev_mock": True,
+    },
+    "website": {
+        "status": "ok",
+        "landing_page_url": "https://mock-landing.techco.dev",
+        "sections": ["hero", "features", "social proof", "CTA"],
+        "_dev_mock": True,
+    },
+    "research": {
+        "status": "ok",
+        "audience_segments": ["B2B SaaS founders", "early-stage startup CTOs", "Y Combinator alumni"],
+        "recommended_channels": ["LinkedIn", "HackerNews", "ProductHunt"],
+        "_dev_mock": True,
+    },
+    "ads": {
+        "status": "ok",
+        "campaign_id": "mock-campaign-001",
+        "impressions": 50000,
+        "clicks": 1200,
+        "ctr": "2.4%",
+        "_dev_mock": True,
+    },
+}
+
+
+def _mock_vendor_response(vendor_url: str) -> dict:
+    """Return a realistic mock based on vendor URL."""
+    url = vendor_url.lower()
+    if "creative" in url:
+        return _DEV_MOCKS["creative"]
+    if "website" in url or "landing" in url:
+        return _DEV_MOCKS["website"]
+    if "exa" in url or "research" in url:
+        return _DEV_MOCKS["research"]
+    if "zeroclick" in url or "ads" in url:
+        return _DEV_MOCKS["ads"]
+    return {"status": "ok", "_dev_mock": True}
 
 
 # ── SELLER SIDE ───────────────────────────────────────────────────────────────
@@ -112,8 +160,13 @@ def call_vendor(
 ) -> dict:
     """
     Call a vendor endpoint with an x402 payment token.
+    In DEV_MODE, skips NVM and returns a realistic mock response.
     Falls back to direct call (no payment) if NVM is not configured.
     """
+    if DEV_MODE:
+        print(f"[DEV] Mocking vendor call → {vendor_url}")
+        return _mock_vendor_response(vendor_url)
+
     token = generate_vendor_token(vendor_plan_id, vendor_agent_id)
 
     headers = {"Content-Type": "application/json"}
