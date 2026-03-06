@@ -1,15 +1,25 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/index.py",
-      "use": "@vercel/python"
+  "installCommand": "npm --prefix adagent-frontend ci",
+  "buildCommand": "npm --prefix adagent-frontend run build",
+  "outputDirectory": "adagent-frontend/dist",
+  "functions": {
+    "api/index.py": {
+      "runtime": "python3.12",
+      "includeFiles": "backend/src/**"
     }
-  ],
+  },
   "routes": [
     {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.py"
+    },
+    {
       "src": "/(.*)",
-      "dest": "api/index.py"
+      "dest": "/index.html"
     }
   ]
 }

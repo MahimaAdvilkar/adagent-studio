@@ -9,14 +9,25 @@ export type CampaignApiResponse = Record<string, unknown>;
 
 type ApiError = Error & { status?: number };
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:8000";
+const API_BASE_URL =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ||
+  (import.meta.env.DEV ? "http://localhost:8000" : "/api");
+
+const PAYMENT_SIGNATURE =
+  (import.meta.env.VITE_X402_PAYMENT_SIGNATURE as string | undefined)?.trim() || "";
 
 async function postJson(endpoint: string, payload: CampaignBrief): Promise<CampaignApiResponse> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (PAYMENT_SIGNATURE) {
+    headers["payment-signature"] = PAYMENT_SIGNATURE;
+  }
+
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify(payload),
   });
 
@@ -41,7 +52,7 @@ export async function runCampaign(brief: CampaignBrief): Promise<CampaignApiResp
     return await postJson("/run-campaign", brief);
   } catch (error) {
     const apiError = error as ApiError;
-    if (apiError.status !== 404) {
+    if (apiError.status !== 402 && apiError.status !== 404) {
       throw error;
     }
   }
