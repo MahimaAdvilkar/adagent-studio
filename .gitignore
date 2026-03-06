@@ -2,6 +2,12 @@
 .env
 *.env
 
+# Node
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+
 # Python
 __pycache__/
 *.py[cod]
