@@ -8,8 +8,6 @@ load_dotenv(dotenv_path=_env_path, override=True)
 
 # ── Google ──
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-if not GOOGLE_API_KEY:
-    raise ValueError("GOOGLE_API_KEY is not set.")
 
 # ── Nevermined (seller) ──
 NVM_API_KEY      = os.getenv("NVM_API_KEY", "")
