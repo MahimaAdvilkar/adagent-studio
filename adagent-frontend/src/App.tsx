@@ -1,12 +1,5 @@
 import { useMemo, useState } from "react";
 import { runCampaign, type CampaignApiResponse, type CampaignBrief } from "./lib/api";
-import {
-  marketplaceReadiness,
-  monetizationGuidance,
-  neverminedJourney,
-  paymentRails,
-  resourceLinks,
-} from "./content/nevermindGuide";
 
 type VendorStatusItem = {
   label: string;
@@ -397,80 +390,8 @@ export default function App() {
           </div>
         </div>
 
-        <div className="mt-8 text-xs text-gray-500">Demo mode fallback is enabled when paid execution is unavailable.</div>
-
-        <div className="mt-8 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
-          <h2 className="text-sm font-semibold">Nevermined Journey: Setup to Revenue</h2>
-          <p className="mt-1 text-xs text-gray-500">
-            Structured onboarding and monetization flow rendered from content, so you can update instructions without editing UI markup.
-          </p>
-
-          <div className="mt-5 grid gap-4">
-            {neverminedJourney.map((section, sectionIndex) => (
-              <div key={section.title} className="rounded-2xl bg-gray-50 p-4 ring-1 ring-gray-200">
-                <div className="text-sm font-semibold">
-                  {sectionIndex + 1}. {section.title}
-                </div>
-                <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-gray-700">
-                  {section.steps.map((step) => (
-                    <li key={step}>{step}</li>
-                  ))}
-                </ol>
-                {section.tip && (
-                  <div className="mt-3 rounded-xl bg-white px-3 py-2 text-xs text-gray-600 ring-1 ring-gray-200">
-                    Tip: {section.tip}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-6 rounded-2xl bg-gray-50 p-4 ring-1 ring-gray-200">
-            <h3 className="text-sm font-semibold">{monetizationGuidance.heading}</h3>
-            <p className="mt-2 text-xs text-gray-600">{monetizationGuidance.summary}</p>
-            <p className="mt-2 text-xs font-medium text-gray-700">{monetizationGuidance.maximizeRevenue}</p>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {paymentRails.map((rail) => (
-                <div key={rail.title} className="rounded-xl bg-white p-3 ring-1 ring-gray-200">
-                  <div className="text-xs font-semibold text-gray-800">{rail.title}</div>
-                  <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-gray-600">
-                    {rail.points.map((point) => (
-                      <li key={point}>{point}</li>
-                    ))}
-                  </ul>
-                  {rail.footnote && <div className="mt-2 text-xs text-gray-500">{rail.footnote}</div>}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-2xl bg-gray-50 p-4 ring-1 ring-gray-200">
-            <h3 className="text-sm font-semibold">What Makes an Agent Marketplace-Ready</h3>
-            <div className="mt-3 space-y-2">
-              {marketplaceReadiness.map((item) => (
-                <div key={item.field} className="rounded-xl bg-white px-3 py-2 text-xs ring-1 ring-gray-200">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="font-medium text-gray-800">{item.field}</span>
-                    <span className="rounded-full bg-gray-100 px-2 py-1 text-[11px] text-gray-600">{item.status}</span>
-                  </div>
-                  <div className="mt-1 text-gray-600">{item.description}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-2xl bg-gray-50 p-4 ring-1 ring-gray-200">
-            <h3 className="text-sm font-semibold">Key Resources</h3>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {resourceLinks.map((resource) => (
-                <div key={resource.label} className="rounded-xl bg-white px-3 py-2 text-xs ring-1 ring-gray-200">
-                  <div className="font-medium text-gray-800">{resource.label}</div>
-                  <div className="mt-1 text-gray-600">{resource.value}</div>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="mt-8 text-xs text-gray-500">
+          Real-mode only: this dashboard now shows live `/run-campaign` responses without preview fallback.
         </div>
       </div>
     </div>

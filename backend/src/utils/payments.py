@@ -57,65 +57,15 @@ def _build_payment_required(plan_id: str, resource_url: str, http_verb: str = "P
     )
 
 
-# ── DEV-MODE MOCKS ───────────────────────────────────────────────────────────
-
-_DEV_MOCKS = {
-    "creative": {
-        "status": "ok",
-        "creatives": [
-            {"headline": "Join the Future of Tech", "body": "Sign up today and get early access.", "cta": "Sign Up Free", "format": "banner ad"},
-            {"headline": "Built for Tech Founders", "body": "Tools that scale with your vision.", "cta": "Get Started", "format": "native ad"},
-        ],
-        "_dev_mock": True,
-    },
-    "website": {
-        "status": "ok",
-        "landing_page_url": "https://mock-landing.techco.dev",
-        "sections": ["hero", "features", "social proof", "CTA"],
-        "_dev_mock": True,
-    },
-    "research": {
-        "status": "ok",
-        "audience_segments": ["B2B SaaS founders", "early-stage startup CTOs", "Y Combinator alumni"],
-        "recommended_channels": ["LinkedIn", "HackerNews", "ProductHunt"],
-        "_dev_mock": True,
-    },
-    "ads": {
-        "status": "ok",
-        "campaign_id": "mock-campaign-001",
-        "impressions": 50000,
-        "clicks": 1200,
-        "ctr": "2.4%",
-        "_dev_mock": True,
-    },
-}
-
-
-def _mock_vendor_response(vendor_url: str) -> dict:
-    """Return a realistic mock based on vendor URL."""
-    url = vendor_url.lower()
-    if "creative" in url:
-        return _DEV_MOCKS["creative"]
-    if "website" in url or "landing" in url:
-        return _DEV_MOCKS["website"]
-    if "exa" in url or "research" in url:
-        return _DEV_MOCKS["research"]
-    if "zeroclick" in url or "ads" in url:
-        return _DEV_MOCKS["ads"]
-    return {"status": "ok", "_dev_mock": True}
-
-
 # ── SELLER SIDE ───────────────────────────────────────────────────────────────
 
 def verify_payment_token(token: str, resource_url: str = "", http_verb: str = "POST") -> bool:
     """
     Verify + settle an incoming x402 payment token from a client.
-    Returns True if valid and credits were burnt, or True in dev if NVM not set.
+    Returns True if valid and credits were burnt.
     """
-    if DEV_MODE:
-        return True
     if not NVM_API_KEY:
-        print("[NVM] NVM_API_KEY is missing in non-dev mode.")
+        print("[NVM] NVM_API_KEY is missing.")
         return False
     if not _NVM_AVAILABLE:
         print("[NVM] payments-py SDK is not available in non-dev mode.")
@@ -156,10 +106,14 @@ def verify_payment_token(token: str, resource_url: str = "", http_verb: str = "P
 def generate_vendor_token(vendor_plan_id: str, vendor_agent_id: str = None) -> str:
     """
     Generate an x402 access token to pay a vendor.
-    Returns the token string, or empty string if NVM not configured.
+    Returns the token string.
     """
-    if not NVM_API_KEY or not vendor_plan_id or not _NVM_AVAILABLE:
-        return ""
+    if not NVM_API_KEY:
+        raise RuntimeError("NVM_API_KEY is missing; cannot generate vendor token.")
+    if not vendor_plan_id:
+        raise RuntimeError("Vendor plan ID is missing; cannot generate vendor token.")
+    if not _NVM_AVAILABLE:
+        raise RuntimeError("payments-py SDK is unavailable; cannot generate vendor token.")
     try:
         p = _get_client()
         result = p.x402.get_x402_access_token(
@@ -167,10 +121,12 @@ def generate_vendor_token(vendor_plan_id: str, vendor_agent_id: str = None) -> s
             agent_id=vendor_agent_id,
             redemption_limit=1,
         )
-        return result.get("accessToken", "")
+        token = result.get("accessToken", "")
+        if not token:
+            raise RuntimeError(f"Empty x402 access token for vendor plan {vendor_plan_id}.")
+        return token
     except Exception as e:
-        print(f"[NVM] Token generation failed for plan {vendor_plan_id}: {e}")
-        return ""
+        raise RuntimeError(f"[NVM] Token generation failed for plan {vendor_plan_id}: {e}") from e
 
 
 def call_vendor(
@@ -181,18 +137,11 @@ def call_vendor(
 ) -> dict:
     """
     Call a vendor endpoint with an x402 payment token.
-    In DEV_MODE, skips NVM and returns a realistic mock response.
-    Falls back to direct call (no payment) if NVM is not configured.
     """
-    if DEV_MODE:
-        print(f"[DEV] Mocking vendor call → {vendor_url}")
-        return _mock_vendor_response(vendor_url)
-
     token = generate_vendor_token(vendor_plan_id, vendor_agent_id)
 
     headers = {"Content-Type": "application/json"}
-    if token:
-        headers["payment-signature"] = token
+    headers["payment-signature"] = token
 
     response = requests.post(vendor_url, json=payload, headers=headers, timeout=30)
 
