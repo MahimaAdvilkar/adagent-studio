@@ -5,18 +5,26 @@ SELL side: client orders AdAgent Studio's plan → generates x402 token → call
 BUY side:  AdAgent Studio generates token for Creative Lady → calls their endpoint
 """
 
+import os
 import requests
 from payments_py import Payments, PaymentOptions
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"), override=True)
 
 # ── Config ──────────────────────────────────────────────────────────────────
-NVM_API_KEY = "nvm-key:eyJhbGciOiJFUzI1NksifQ.eyJpc3MiOiIweDZCMTZEMGIzMzQ4MjQ1ODFCNGEyNEE0OUZkN2ZjYkQ2NTA5Q0U1ZGEiLCJzdWIiOiIweEUwNTU4MTZENTQxNDA1YmY1NzdFOGFEMjZFMjE1M0U1ZjU2MkU5RjYiLCJqdGkiOiIweDA3NjQzOTRmMTI4MDFlMzkwZWY1MWFkMmY3MjUyNDAyYmRjMWIxOWQ1YTkwNmJkMGJiYWUyOTA5NWY2MjJmZTIiLCJleHAiOjQ5Mjg1MTQzNjMsIm8xMXkiOiJzay1oZWxpY29uZS10cW5vNjRxLXl4NmVxcnEtdHBqeXJpcS1ybHY3aHVpIn0.hCDG6u6zeZ98w5oWbwTKRjcgkWIcnDjrvZUmLuCF1AkZx0ps58UXzREKNcNPjTEMYe1rqCOoyQGfVeWfuR9Zlhs"
+NVM_API_KEY = (os.getenv("NVM_API_KEY") or "").strip()
+NVM_ENVIRONMENT = (os.getenv("NVM_ENVIRONMENT", "sandbox") or "sandbox").strip()
+OUR_PLAN_ID = (os.getenv("NVM_PLAN_ID") or "").strip()
+OUR_AGENT_ID = (os.getenv("NVM_AGENT_ID") or "").strip()
+CREATIVE_LADY_PLAN = (os.getenv("CREATIVE_LADY_PLAN_ID") or "").strip()
+CREATIVE_LADY_URL = (os.getenv("CREATIVE_LADY_URL") or "").strip()
+OUR_ENDPOINT = (os.getenv("OUR_ENDPOINT") or "https://adagent-studio-seven.vercel.app/api/run-campaign").strip()
 
-OUR_PLAN_ID        = "43955667645714568092057142565359274237259428265532767327265493246604990476175"
-CREATIVE_LADY_PLAN = "9661082042009636068072391467054896427087238025772062250717418964278633341785"
-CREATIVE_LADY_URL  = "https://beneficial-essence-production-99c7.up.railway.app/mcp"
-OUR_ENDPOINT       = "https://adagent-studio-seven.vercel.app/run-campaign"
+if not NVM_API_KEY or not OUR_PLAN_ID:
+    raise SystemExit("Missing NVM_API_KEY or NVM_PLAN_ID in backend/.env")
 
-p = Payments.get_instance(PaymentOptions(nvm_api_key=NVM_API_KEY, environment="sandbox"))
+p = Payments.get_instance(PaymentOptions(nvm_api_key=NVM_API_KEY, environment=NVM_ENVIRONMENT))
 
 # ════════════════════════════════════════════════════════════════════════════
 # SELL SIDE — simulate a client paying us
@@ -30,7 +38,11 @@ print(f"   Order result: {order}")
 
 # Step 2: Generate an x402 access token for our plan
 print("2. Generating x402 token for our plan...")
-token_result = p.x402.get_x402_access_token(plan_id=OUR_PLAN_ID, redemption_limit=1)
+token_result = p.x402.get_x402_access_token(
+    plan_id=OUR_PLAN_ID,
+    agent_id=OUR_AGENT_ID or None,
+    redemption_limit=1
+)
 our_token = token_result.get("accessToken", "")
 print(f"   Token (first 60 chars): {our_token[:60]}...")
 
@@ -51,28 +63,31 @@ print(f"   Response: {resp.json()}")
 print("\n── BUY SIDE ───────────────────────────────────────────────")
 
 # Step 4: Order Creative Lady's plan (subscribe to their service)
-print("4. Ordering Creative Lady plan...")
-cl_order = p.plans.order_plan(plan_id=CREATIVE_LADY_PLAN)
-print(f"   Order result: {cl_order}")
+if CREATIVE_LADY_PLAN and CREATIVE_LADY_URL:
+    print("4. Ordering Creative Lady plan...")
+    cl_order = p.plans.order_plan(plan_id=CREATIVE_LADY_PLAN)
+    print(f"   Order result: {cl_order}")
 
-# Step 5: Generate token for Creative Lady
-print("5. Generating x402 token for Creative Lady...")
-cl_token_result = p.x402.get_x402_access_token(plan_id=CREATIVE_LADY_PLAN, redemption_limit=1)
-cl_token = cl_token_result.get("accessToken", "")
-print(f"   Token (first 60 chars): {cl_token[:60]}...")
+    # Step 5: Generate token for Creative Lady
+    print("5. Generating x402 token for Creative Lady...")
+    cl_token_result = p.x402.get_x402_access_token(plan_id=CREATIVE_LADY_PLAN, redemption_limit=1)
+    cl_token = cl_token_result.get("accessToken", "")
+    print(f"   Token (first 60 chars): {cl_token[:60]}...")
 
-# Step 6: Call Creative Lady's endpoint
-print("6. Calling Creative Lady's endpoint with payment token...")
-cl_resp = requests.post(
-    CREATIVE_LADY_URL,
-    json={"brief": "Create ad creatives for TestBrand targeting founders"},
-    headers={"payment-signature": cl_token, "Content-Type": "application/json"},
-    timeout=30,
-)
-print(f"   Status: {cl_resp.status_code}")
-try:
-    print(f"   Response: {cl_resp.json()}")
-except Exception:
-    print(f"   Response text: {cl_resp.text[:200]}")
+    # Step 6: Call Creative Lady's endpoint
+    print("6. Calling Creative Lady's endpoint with payment token...")
+    cl_resp = requests.post(
+        CREATIVE_LADY_URL,
+        json={"brief": "Create ad creatives for TestBrand targeting founders"},
+        headers={"payment-signature": cl_token, "Content-Type": "application/json"},
+        timeout=30,
+    )
+    print(f"   Status: {cl_resp.status_code}")
+    try:
+        print(f"   Response: {cl_resp.json()}")
+    except Exception:
+        print(f"   Response text: {cl_resp.text[:200]}")
+else:
+    print("4-6. Skipping vendor buy-side test (CREATIVE_LADY_PLAN_ID / CREATIVE_LADY_URL not set).")
 
 print("\n── DONE ───────────────────────────────────────────────────")
