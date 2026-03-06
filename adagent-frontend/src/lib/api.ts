@@ -39,9 +39,7 @@ async function postJson(endpoint: string, payload: CampaignBrief): Promise<Campa
     } catch {
       detail = await response.text();
     }
-    const error = new Error(detail || `Request failed with status ${response.status}`) as ApiError;
-    error.status = response.status;
-    throw error;
+    throw new Error(detail || `Request failed with status ${response.status}`);
   }
 
   return (await response.json()) as CampaignApiResponse;

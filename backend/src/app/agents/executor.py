@@ -11,7 +11,7 @@ The executor is synchronous and returns the completed AgentGraph.
 
 import json
 from utils.config import GOOGLE_API_KEY
-from app.models.agent_graph import AgentGraph, AgentNode, AgentStatus, NodeType
+from app.models.agent_graph import AgentGraph, AgentNode, AgentStatus
 from app.agents.vendor_client import VendorClient
 
 try:
@@ -54,31 +54,6 @@ def _get_vendor_fn(node: AgentNode):
 _gemini = genai.Client(api_key=GOOGLE_API_KEY) if (genai and GOOGLE_API_KEY) else None
 _MODEL  = "gemini-2.5-flash"
 
-
-def _fallback_llm_output(node: AgentNode, graph: AgentGraph) -> dict:
-    """Deterministic fallback when Gemini client is unavailable."""
-    node_id = node.id.lower()
-    if "strategy" in node_id:
-        return {
-            "goal": graph.goal,
-            "audience": node.input.get("audience", "tech founders 25-40") if isinstance(node.input, dict) else "tech founders 25-40",
-            "messaging": ["save time", "scale faster", "launch faster"],
-            "channels": ["ZeroClick ads", "Landing page"],
-        }
-    if "analytics" in node_id:
-        return {
-            "clicks": 1200,
-            "conversions": 96,
-            "note": "Fallback analytics used because Gemini client is unavailable.",
-        }
-    if "budget" in node_id:
-        return {
-            "budget": graph.total_budget,
-            "allocation_note": "Using static fallback allocation for demo safety.",
-        }
-    return {"status": "ok", "note": "Fallback internal agent output."}
-
-
 def _run_llm_node(node: AgentNode, graph: AgentGraph) -> dict:
     """
     Run a Gemini call for an internal orchestrator or analysis node.
@@ -107,11 +82,11 @@ Your role: {node.description}
 {"Special instructions: " + node.subgraph_hint if node.subgraph_hint else ""}
 
 Produce a concise JSON output with your work results. Keys should match your role.
-Respond ONLY in valid JSON — no markdown fences, no explanation.
+    Respond ONLY in valid JSON — no markdown fences, no explanation.
 """
 
     if _gemini is None:
-        return _fallback_llm_output(node, graph)
+        raise RuntimeError("GOOGLE_API_KEY is missing or Gemini client is unavailable.")
 
     response = None
     try:
@@ -125,7 +100,9 @@ Respond ONLY in valid JSON — no markdown fences, no explanation.
             raw = raw.strip().rstrip("```")
         return json.loads(raw)
     except Exception as e:
-        return {"status": "llm_error", "error": str(e), "raw": getattr(response, "text", "")}
+        raise RuntimeError(
+            f"LLM execution failed for node '{node.id}': {e}; raw={getattr(response, 'text', '')}"
+        ) from e
 
 
 # ── Main executor ─────────────────────────────────────────────────────────────

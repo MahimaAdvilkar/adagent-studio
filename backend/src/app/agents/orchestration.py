@@ -93,8 +93,7 @@ def _transactions(graph: AgentGraph, budget: float) -> tuple[list[dict[str, Any]
     for name, keys, amount in vendor_nodes:
         node = _find_node(graph, keys)
         if node is None:
-            txs.append({"vendor": name, "amount": amount, "status": "Planned"})
-            spend += amount
+            txs.append({"vendor": name, "amount": 0.0, "status": "Not Configured"})
         elif node.status == AgentStatus.DONE:
             txs.append({"vendor": name, "amount": amount, "status": "Paid"})
             spend += amount

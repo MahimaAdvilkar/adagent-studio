@@ -165,7 +165,7 @@ class Blueprint:
 
     def create(self, brief: dict) -> AgentGraph:
         if not self.client:
-            raise RuntimeError("GOOGLE_API_KEY is missing. Cannot create blueprint without LLM.")
+            raise RuntimeError("GOOGLE_API_KEY is missing or Gemini client is unavailable.")
 
         system_prompt = self._load_prompt("root_agent_prompt.txt")
         user_message = json.dumps(brief, indent=2)
