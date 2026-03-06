@@ -1,5 +1,5 @@
 from google import genai
-from utils.config import GOOGLE_API_KEY
+from utils.config import GOOGLE_API_KEY, MINDRA_CHILD_NODE_ENABLED
 from app.models.agent_graph import AgentGraph, AgentNode, NodeType
 import json
 import os
@@ -47,59 +47,70 @@ class Blueprint:
             )
             graph.add_node(node)
 
+        if MINDRA_CHILD_NODE_ENABLED:
+            self._inject_mindra_content_child(graph)
+
         return graph
 
-    def _fallback_graph(self, brief: dict) -> AgentGraph:
-        raw_data = {
-            "campaign_id": "fallback-campaign",
-            "brand": brief.get("brand", ""),
-            "goal": brief.get("goal", ""),
-            "total_budget": brief.get("budget", 0),
-            "execution_order": ["ceo", "strategy", "analytics", "budget_manager"],
-            "agents": [
-                {
-                    "id": "ceo",
-                    "name": "CEO Agent",
-                    "icon": "👔",
-                    "level": 1,
-                    "node_type": "orchestrator",
-                    "depends_on": [],
-                    "description": "Coordinates campaign execution and vendors."
-                },
-                {
-                    "id": "strategy",
-                    "name": "Strategy Agent",
-                    "icon": "🎯",
-                    "level": 2,
-                    "node_type": "leaf",
-                    "depends_on": ["ceo"],
-                    "description": "Builds targeting, messaging, and channel strategy."
-                },
-                {
-                    "id": "analytics",
-                    "name": "Analytics Agent",
-                    "icon": "📊",
-                    "level": 2,
-                    "node_type": "leaf",
-                    "depends_on": ["ceo"],
-                    "description": "Tracks campaign performance and ROI."
-                },
-                {
-                    "id": "budget_manager",
-                    "name": "Budget Manager Agent",
-                    "icon": "💰",
-                    "level": 2,
-                    "node_type": "leaf",
-                    "depends_on": ["ceo"],
-                    "description": "Enforces budget constraints and spend allocation."
-                },
-            ],
-        }
-        return self._parse_graph(raw_data, brief)
+    def _inject_mindra_content_child(self, graph: AgentGraph) -> None:
+        """Ensure content generation runs before website creation using a Mindra child node."""
+        website_node = None
+        creative_node = None
+        for node in graph.nodes.values():
+            name_low = node.name.lower()
+            id_low = node.id.lower()
+            if "website" in name_low or "website" in id_low:
+                website_node = node
+            if "creative" in name_low or "creative" in id_low:
+                creative_node = node
+
+        if website_node is None:
+            return
+
+        # Prefer existing creative node so we don't duplicate creative calls.
+        if creative_node is not None:
+            child_node_id = creative_node.id
+            creative_node.name = "Content Creator Agent"
+            creative_node.level = 3
+        else:
+            child_node_id = "mindra_creative_content"
+            child_depends = list(website_node.depends_on)
+            child_node = AgentNode(
+                id=child_node_id,
+                name="Content Creator Agent",
+                icon="✨",
+                level=3,
+                node_type=NodeType.LEAF,
+                depends_on=child_depends,
+                description=(
+                    "Generate website-ready ad/content copy variants before website build. "
+                    "This node is executed by the external content workflow."
+                ),
+                input=website_node.input,
+            )
+            graph.add_node(child_node)
+
+            # Place the new node right before website execution when possible.
+            if website_node.id in graph.execution_order:
+                idx = graph.execution_order.index(website_node.id)
+                if child_node_id not in graph.execution_order:
+                    graph.execution_order.insert(idx, child_node_id)
+            elif child_node_id not in graph.execution_order:
+                graph.execution_order.append(child_node_id)
+
+        # Website must wait for the Mindra content output.
+        if child_node_id not in website_node.depends_on:
+            website_node.depends_on.append(child_node_id)
+
+        # If analytics has explicit dependencies, make sure it includes the child node.
+        for node in graph.nodes.values():
+            low = f"{node.id} {node.name}".lower()
+            if "analytics" in low and child_node_id not in node.depends_on:
+                node.depends_on.append(child_node_id)
 
     def create(self, brief: dict) -> AgentGraph:
         if not self.client:
-            return self._fallback_graph(brief)
+            raise RuntimeError("GOOGLE_API_KEY is missing. Cannot create blueprint without LLM.")
 
         system_prompt = self._load_prompt("root_agent_prompt.txt")
         user_message = json.dumps(brief, indent=2)
@@ -112,5 +123,5 @@ class Blueprint:
             raw = self._strip_fences(response.text.strip())
             raw_data = json.loads(raw)
             return self._parse_graph(raw_data, brief)
-        except Exception:
-            return self._fallback_graph(brief)
+        except Exception as e:
+            raise RuntimeError(f"Blueprint generation failed: {str(e)}")

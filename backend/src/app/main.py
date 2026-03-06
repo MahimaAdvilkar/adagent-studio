@@ -1,8 +1,10 @@
 import os
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from app.agents.blueprint import Blueprint
 from app.agents.executor import execute_graph
+from app.agents.mindra_provider import MindraApiError, run_mindra_flow
 from app.agents.orchestration import build_campaign_response, workflow_preview
 from app.models.agent_graph import AgentGraph
 from utils.payments import verify_payment_token, payment_status
@@ -11,6 +13,19 @@ DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
 
 app = FastAPI(title="AdAgent Studio", version="1.0.0")
 blueprint = Blueprint()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class CampaignBrief(BaseModel):
@@ -52,6 +67,17 @@ async def create_blueprint_summary(brief: CampaignBrief):
 @app.post("/api/workflow/preview")
 async def preview_workflow(brief: CampaignBrief):
     return workflow_preview(brief.model_dump())
+
+
+@app.post("/mindra/run")
+@app.post("/api/mindra/run")
+async def run_mindra(brief: CampaignBrief):
+    try:
+        return run_mindra_flow(brief.model_dump(), blueprint)
+    except MindraApiError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/run-campaign")

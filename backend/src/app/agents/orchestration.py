@@ -109,7 +109,7 @@ def _strategy_output(graph: AgentGraph, brief: dict[str, Any]) -> dict[str, Any]
 def _switching_signal(graph: AgentGraph) -> tuple[str, str]:
     for node in graph.nodes.values():
         if node.status == AgentStatus.FAILED:
-            return "SWITCH", f"{node.name} failed. Fallback to internal LLM/vendor backup."
+            return "SWITCH", f"{node.name} failed. Switching to internal backup route."
     return "HOLD", "All core agents are healthy."
 
 
