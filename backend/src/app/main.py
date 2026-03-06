@@ -20,11 +20,14 @@ class CampaignBrief(BaseModel):
 
 
 @app.get("/")
+@app.get("/api")
+@app.get("/api/")
 async def read_root():
     return {"message": "AdAgent Studio backend is running!"}
 
 
 @app.post("/createblueprint", response_model=AgentGraph)
+@app.post("/api/createblueprint", response_model=AgentGraph)
 async def create_blueprint(brief: CampaignBrief):
     try:
         return blueprint.create(brief.model_dump())
@@ -35,6 +38,7 @@ async def create_blueprint(brief: CampaignBrief):
 
 
 @app.post("/createblueprint/summary")
+@app.post("/api/createblueprint/summary")
 async def create_blueprint_summary(brief: CampaignBrief):
     try:
         graph = blueprint.create(brief.model_dump())
@@ -44,6 +48,7 @@ async def create_blueprint_summary(brief: CampaignBrief):
 
 
 @app.post("/run-campaign")
+@app.post("/api/run-campaign")
 async def run_campaign(brief: CampaignBrief, request: Request):
     """
     Payment-protected endpoint.
