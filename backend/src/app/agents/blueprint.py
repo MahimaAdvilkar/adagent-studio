@@ -1,4 +1,4 @@
-from utils.config import GOOGLE_API_KEY, MINDRA_CHILD_NODE_ENABLED
+from utils.config import GOOGLE_API_KEY, MINDRA_CHILD_NODE_ENABLED, MINDRA_TWITTER_AGENT_ENABLED
 from app.models.agent_graph import AgentGraph, AgentNode, NodeType
 import json
 import os
@@ -53,6 +53,8 @@ class Blueprint:
 
         if MINDRA_CHILD_NODE_ENABLED:
             self._inject_mindra_content_child(graph)
+        if MINDRA_TWITTER_AGENT_ENABLED:
+            self._inject_mindra_twitter_child(graph)
 
         return graph
 
@@ -111,6 +113,55 @@ class Blueprint:
             low = f"{node.id} {node.name}".lower()
             if "analytics" in low and child_node_id not in node.depends_on:
                 node.depends_on.append(child_node_id)
+
+    def _inject_mindra_twitter_child(self, graph: AgentGraph) -> None:
+        """Ensure there is a Twitter posting node driven by Mindra after creatives are ready."""
+        creative_node = None
+        for node in graph.nodes.values():
+            low = f"{node.id} {node.name}".lower()
+            if "creative" in low or "content creator" in low:
+                creative_node = node
+                break
+
+        if creative_node is None:
+            return
+
+        twitter_node = None
+        for node in graph.nodes.values():
+            low = f"{node.id} {node.name}".lower()
+            if "twitter" in low or "x post" in low:
+                twitter_node = node
+                break
+
+        twitter_node_id = "mindra_twitter_agent"
+        if twitter_node is None:
+            twitter_node = AgentNode(
+                id=twitter_node_id,
+                name="Twitter Agent",
+                icon="X",
+                level=3,
+                node_type=NodeType.LEAF,
+                depends_on=[creative_node.id],
+                description=(
+                    "Create one campaign tweet from creative outputs and post via connected "
+                    "Twitter/X integration using Mindra workflow tools."
+                ),
+                input=creative_node.input,
+            )
+            graph.add_node(twitter_node)
+        else:
+            twitter_node.name = "Twitter Agent"
+            twitter_node.level = max(3, twitter_node.level)
+            if creative_node.id not in twitter_node.depends_on:
+                twitter_node.depends_on.append(creative_node.id)
+            twitter_node_id = twitter_node.id
+
+        if twitter_node_id not in graph.execution_order:
+            if creative_node.id in graph.execution_order:
+                idx = graph.execution_order.index(creative_node.id)
+                graph.execution_order.insert(idx + 1, twitter_node_id)
+            else:
+                graph.execution_order.append(twitter_node_id)
 
     def create(self, brief: dict) -> AgentGraph:
         if not self.client:

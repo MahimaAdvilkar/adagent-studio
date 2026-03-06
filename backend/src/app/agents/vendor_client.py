@@ -20,6 +20,8 @@ from utils.config import (
     MINDRA_API_KEY,
     MINDRA_API_URL,
     MINDRA_WORKFLOW_SLUG,
+    MINDRA_TWITTER_API_URL,
+    MINDRA_TWITTER_WORKFLOW_SLUG,
     MINDRA_TIMEOUT_SECONDS,
     MINDRA_CHILD_NODE_ENABLED,
     MINDRA_STREAM_WAIT_SECONDS,
@@ -32,6 +34,14 @@ def _mindra_run_url() -> str:
     if MINDRA_WORKFLOW_SLUG:
         return f"https://api.mindra.co/v1/workflows/{MINDRA_WORKFLOW_SLUG}/run"
     return ""
+
+
+def _mindra_twitter_run_url() -> str:
+    if MINDRA_TWITTER_API_URL:
+        return MINDRA_TWITTER_API_URL
+    if MINDRA_TWITTER_WORKFLOW_SLUG:
+        return f"https://api.mindra.co/v1/workflows/{MINDRA_TWITTER_WORKFLOW_SLUG}/run"
+    return _mindra_run_url()
 
 
 def _mindra_create_creatives(brief: dict) -> dict:
@@ -95,6 +105,124 @@ def _mindra_create_creatives(brief: dict) -> dict:
         "execution_id": execution_id,
         "stream_url": stream_url,
         "creatives": creatives,
+        "stream_events": stream_result,
+        "raw": data,
+    }
+
+
+def _mindra_create_and_post_twitter(brief: dict) -> dict:
+    """Invoke Mindra workflow to create and post one X/Twitter campaign update."""
+    if not MINDRA_API_KEY:
+        raise RuntimeError("MINDRA twitter node enabled but MINDRA_API_KEY is missing")
+
+    run_url = _mindra_twitter_run_url()
+    if not run_url:
+        raise RuntimeError(
+            "MINDRA twitter node enabled but twitter or default Mindra workflow URL/slug is missing"
+        )
+
+    creatives = brief.get("creatives", []) if isinstance(brief.get("creatives"), list) else []
+    first_creative = creatives[0] if creatives and isinstance(creatives[0], dict) else {}
+    headline = str(first_creative.get("headline", "")).strip()
+    body = str(first_creative.get("body", "")).strip()
+
+    task = (
+        f"For brand '{brief.get('brand', '')}', create one concise Twitter/X post for goal "
+        f"'{brief.get('goal', '')}' targeting '{brief.get('audience', '')}'. "
+        "Use the provided creative context if available. Then publish it using the connected "
+        "Twitter/X integration tool. Do not stop at drafting. Execute the posting tool. "
+        "Return strict JSON with keys: post_content, post_url, posted (true/false), reason."
+    )
+
+    payload = {
+        "task": task,
+        "metadata": {
+            "source": "adagent-studio-child-node",
+            "role": "twitter_agent",
+            "brief": brief,
+            "creative_context": {
+                "headline": headline,
+                "body": body,
+            },
+        },
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "x-api-key": MINDRA_API_KEY,
+    }
+
+    with httpx.Client(timeout=MINDRA_TIMEOUT_SECONDS) as client:
+        response = client.post(run_url, headers=headers, json=payload)
+
+    if response.status_code >= 400:
+        raise RuntimeError(
+            f"Mindra twitter node failed: {response.status_code} {response.text[:300]}"
+        )
+
+    data = response.json()
+    if not isinstance(data, dict):
+        raise RuntimeError("Mindra twitter node returned non-object JSON")
+
+    execution_id = str(data.get("execution_id", ""))
+    stream_url = str(data.get("stream_url", ""))
+
+    stream_result = _collect_mindra_stream_output(
+        headers=headers,
+        execution_id=execution_id,
+        stream_url=stream_url,
+    )
+
+    tweet_text, post_url, pending_approval, approval_id = _extract_twitter_result(stream_result)
+    tool_names: list[str] = []
+    for event in stream_result.get("tool_events", []):
+        if not isinstance(event, dict):
+            continue
+        payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+        for key in ["tool_name", "name", "tool"]:
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                tool_names.append(value.strip())
+                break
+
+    # Deduplicate while preserving order.
+    seen_tools = set()
+    deduped_tool_names: list[str] = []
+    for name in tool_names:
+        if name in seen_tools:
+            continue
+        seen_tools.add(name)
+        deduped_tool_names.append(name)
+
+    twitter_tool_used = any("twitter" in name.lower() or "tweet" in name.lower() for name in deduped_tool_names)
+
+    status = str(data.get("status", "running"))
+    status_reason = ""
+    if pending_approval:
+        status = "pending_approval"
+        status_reason = "Posting requires approval; approve using execution_id + approval_id."
+    elif post_url:
+        status = "done"
+        status_reason = "Tweet posted successfully."
+    elif tweet_text:
+        status = "generated_only"
+        status_reason = "Tweet text generated but no post URL returned by workflow/tool."
+    else:
+        status = "not_posted"
+        status_reason = "No generated tweet text or post URL returned by workflow."
+
+    return {
+        "status": status,
+        "provider": "mindra",
+        "workflow_slug": str(data.get("workflow_slug", MINDRA_WORKFLOW_SLUG)),
+        "execution_id": execution_id,
+        "stream_url": stream_url,
+        "tweet_text": tweet_text,
+        "post_url": post_url,
+        "pending_approval": pending_approval,
+        "approval_id": approval_id,
+        "twitter_tool_used": twitter_tool_used,
+        "tool_names": deduped_tool_names,
+        "status_reason": status_reason,
         "stream_events": stream_result,
         "raw": data,
     }
@@ -403,6 +531,87 @@ def _extract_text_from_payload(value) -> str:
     return ""
 
 
+def _extract_twitter_result(stream_result: dict) -> tuple[str, str, bool, str]:
+    """Extract tweet body + post URL from stream result payloads."""
+    if not isinstance(stream_result, dict):
+        return "", "", False, ""
+
+    pending_approval = False
+    approval_id = ""
+    post_url = ""
+    candidates: list[str] = []
+
+    for event in stream_result.get("tool_events", []):
+        if not isinstance(event, dict):
+            continue
+        event_type = str(event.get("event", ""))
+        payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+        if event_type == "approval_request":
+            pending_approval = True
+            maybe_approval_id = payload.get("approval_id")
+            if isinstance(maybe_approval_id, str) and maybe_approval_id.strip():
+                approval_id = maybe_approval_id.strip()
+            else:
+                maybe_approval_id = payload.get("approvalId")
+                if isinstance(maybe_approval_id, str) and maybe_approval_id.strip():
+                    approval_id = maybe_approval_id.strip()
+        for key in ["post_url", "url", "tweet_url"]:
+            value = payload.get(key)
+            if isinstance(value, str) and value.startswith("http"):
+                post_url = value
+
+    done = stream_result.get("done") if isinstance(stream_result.get("done"), dict) else {}
+    for key in ["final_answer", "answer", "result", "content", "message", "output"]:
+        text = _extract_text_from_payload(done.get(key))
+        if text:
+            candidates.append(text)
+
+    for chunk in stream_result.get("chunks", []):
+        if isinstance(chunk, str) and chunk.strip():
+            candidates.append(chunk.strip())
+
+    tweet_text = ""
+    # Use latest meaningful text first; early chunks are often planning/thinking traces.
+    for text in reversed(candidates):
+        stripped = text.strip()
+        if not stripped:
+            continue
+        lower = stripped.lower()
+        if (
+            lower.startswith("let me ")
+            or lower.startswith("i will ")
+            or "checking for any stored context" in lower
+            or "recalling relevant memories" in lower
+        ):
+            continue
+        if stripped.startswith("{"):
+            try:
+                payload = json.loads(stripped)
+            except Exception:
+                payload = None
+            if isinstance(payload, dict):
+                posted = payload.get("posted")
+                if isinstance(posted, bool) and not posted:
+                    # Keep scanning for a successful posted payload.
+                    pass
+                for key in ["post_content", "content", "tweet", "text"]:
+                    value = payload.get(key)
+                    if isinstance(value, str) and value.strip():
+                        tweet_text = value.strip()
+                        break
+                for key in ["post_url", "url", "tweet_url"]:
+                    value = payload.get(key)
+                    if isinstance(value, str) and value.startswith("http"):
+                        post_url = value
+                if tweet_text:
+                    break
+        elif len(stripped) <= 1000:
+            tweet_text = stripped
+            break
+
+    return tweet_text, post_url, pending_approval, approval_id
+
+
 class VendorClient:
 
     # ── Website Guy ($3) ──────────────────────────────────────────────────────
@@ -499,3 +708,10 @@ class VendorClient:
             "budget": brief.get("budget", 15),
         }
         return call_vendor(ZEROCLICK_URL, ZEROCLICK_PLAN_ID, payload)
+
+    # ── Twitter Agent (Mindra workflow tools) ─────────────────────────────────
+
+    @staticmethod
+    def create_and_post_twitter(brief: dict) -> dict:
+        """Create and post campaign tweet using Mindra workflow integration."""
+        return _mindra_create_and_post_twitter(brief)

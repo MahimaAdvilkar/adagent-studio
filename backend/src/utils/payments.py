@@ -213,3 +213,47 @@ def payment_status() -> dict:
         "plan_id_set": bool(NVM_PLAN_ID),
         "agent_id_set": bool(NVM_AGENT_ID),
     }
+
+
+def nevermined_wallet_snapshot() -> dict:
+    """Return plan balance and estimated wallet value from Nevermined.
+
+    Value is estimated as `balance * price_per_credit` for the configured plan.
+    """
+    if DEV_MODE:
+        return {"available": False, "reason": "dev_mode"}
+    if not NVM_API_KEY or not NVM_PLAN_ID or not _NVM_AVAILABLE:
+        return {
+            "available": False,
+            "reason": "missing_nvm_configuration",
+        }
+
+    try:
+        p = _get_client()
+        plan_balance = p.plans.get_plan_balance(NVM_PLAN_ID)
+
+        # payments-py may return a pydantic model or dict-like object.
+        balance_raw = getattr(plan_balance, "balance", None)
+        price_raw = getattr(plan_balance, "price_per_credit", None)
+        holder_address = getattr(plan_balance, "holder_address", "")
+        plan_name = getattr(plan_balance, "plan_name", "")
+
+        balance = int(balance_raw if balance_raw is not None else 0)
+        price_per_credit = float(price_raw if price_raw is not None else 0.0)
+        wallet_value = round(balance * price_per_credit, 4)
+
+        return {
+            "available": True,
+            "plan_id": NVM_PLAN_ID,
+            "plan_name": plan_name,
+            "holder_address": holder_address,
+            "wallet_credits": balance,
+            "price_per_credit": price_per_credit,
+            "wallet_value": wallet_value,
+        }
+    except Exception as e:
+        return {
+            "available": False,
+            "reason": "query_failed",
+            "error": str(e),
+        }

@@ -38,6 +38,15 @@ MINDRA_PROVIDER = (os.getenv("MINDRA_PROVIDER", "api") or "api").strip().lower()
 MINDRA_API_URL = (os.getenv("MINDRA_API_URL", "") or "").strip()
 MINDRA_API_KEY = (os.getenv("MINDRA_API_KEY", "") or "").strip()
 MINDRA_WORKFLOW_SLUG = (os.getenv("MINDRA_WORKFLOW_SLUG", "") or "").strip()
+MINDRA_TWITTER_API_URL = (os.getenv("MINDRA_TWITTER_API_URL", "") or "").strip()
+MINDRA_TWITTER_WORKFLOW_SLUG = (os.getenv("MINDRA_TWITTER_WORKFLOW_SLUG", "") or "").strip()
 MINDRA_TIMEOUT_SECONDS = float((os.getenv("MINDRA_TIMEOUT_SECONDS", "180") or "180").strip())
 MINDRA_CHILD_NODE_ENABLED = (os.getenv("MINDRA_CHILD_NODE_ENABLED", "true") or "true").strip().lower() == "true"
 MINDRA_STREAM_WAIT_SECONDS = float((os.getenv("MINDRA_STREAM_WAIT_SECONDS", "90") or "90").strip())
+MINDRA_TWITTER_AGENT_ENABLED = (os.getenv("MINDRA_TWITTER_AGENT_ENABLED", "true") or "true").strip().lower() == "true"
+
+# -- Trust Net --
+TRUST_NET_BASE_URL = (
+	os.getenv("TRUST_NET_BASE_URL", "https://trust-net-mcp.rikenshah-02.workers.dev")
+	or "https://trust-net-mcp.rikenshah-02.workers.dev"
+).strip().rstrip("/")

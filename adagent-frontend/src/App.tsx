@@ -50,6 +50,7 @@ const DEFAULT_VENDORS: VendorStatusItem[] = [
   { label: "🔬 Exa (Research)", status: "Pending" },
   { label: "🌐 Website Guy", status: "Pending" },
   { label: "✍️ Creative Lady", status: "Pending" },
+  { label: "𝕏 Twitter Agent", status: "Pending" },
   { label: "📺 ZeroClick (Ads)", status: "Pending" },
 ];
 
@@ -857,12 +858,17 @@ export default function App() {
       toNumber(finance?.margin) ??
       (brief.budget - spend);
 
+    const walletValue =
+      toNumber(responseData?.wallet_value) ??
+      toNumber(finance?.wallet_value);
+
     return {
       transactions: toNumber(responseData?.transaction_count) ?? transactions.length,
       spend,
       remaining,
       roi,
       margin: formatMoney(marginValue),
+      wallet: walletValue === null ? "Not available" : formatMoney(walletValue),
       clicks: toText(responseData?.clicks ?? metrics?.clicks),
       conversions: toText(responseData?.conversions ?? metrics?.conversions),
       buySellState: toText(responseData?.buy_sell_signal, "HOLD"),
@@ -942,7 +948,7 @@ export default function App() {
               ROI: <span className="font-medium">{kpis.roi}</span>
             </span>
             <span className="rounded-full bg-white px-3 py-1 text-xs shadow-sm ring-1 ring-gray-200">
-              Margin: <span className="font-medium">{kpis.margin}</span>
+              Wallet: <span className="font-medium">{kpis.wallet}</span>
             </span>
           </div>
         </div>
