@@ -17,7 +17,8 @@ def main() -> None:
     src_dir = Path(__file__).resolve().parent
     backend_dir = src_dir.parent
     repo_dir = backend_dir.parent
-    for env_path in [backend_dir / ".env", repo_dir / ".ENV", repo_dir / ".env"]:
+    # Load root env files first, then backend/.env last so backend values win.
+    for env_path in [repo_dir / ".ENV", repo_dir / ".env", backend_dir / ".env"]:
         if env_path.exists():
             load_dotenv(dotenv_path=env_path, override=True)
 

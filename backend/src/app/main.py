@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from app.agents.blueprint import Blueprint
 from app.agents.executor import execute_graph
+from app.agents.orchestration import build_campaign_response, workflow_preview
 from app.models.agent_graph import AgentGraph
 from utils.payments import verify_payment_token, payment_status
 
@@ -47,6 +48,12 @@ async def create_blueprint_summary(brief: CampaignBrief):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/workflow/preview")
+@app.post("/api/workflow/preview")
+async def preview_workflow(brief: CampaignBrief):
+    return workflow_preview(brief.model_dump())
+
+
 @app.post("/run-campaign")
 @app.post("/api/run-campaign")
 async def run_campaign(brief: CampaignBrief, request: Request):
@@ -66,27 +73,14 @@ async def run_campaign(brief: CampaignBrief, request: Request):
 
     try:
         # Step 1: Blueprint — LLM designs the agent graph
-        graph = blueprint.create(brief.model_dump())
+        brief_payload = brief.model_dump()
+        graph = blueprint.create(brief_payload)
 
         # Step 2: Execute — run all agents in dependency order
         graph = execute_graph(graph)
 
-        return {
-            "status": "complete",
-            "campaign_id": graph.campaign_id,
-            "brand": graph.brand,
-            "goal": graph.goal,
-            "summary": graph.summary(),
-            "agents": {
-                node_id: {
-                    "name": node.name,
-                    "status": node.status,
-                    "output": node.output,
-                    "duration_seconds": node.duration_seconds,
-                }
-                for node_id, node in graph.nodes.items()
-            },
-        }
+        # Step 3: Normalize outputs for dashboard + orchestration view
+        return build_campaign_response(graph, brief_payload)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
