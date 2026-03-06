@@ -1,9 +1,12 @@
+import os
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from app.agents.blueprint import Blueprint
 from app.agents.executor import execute_graph
 from app.models.agent_graph import AgentGraph
 from utils.payments import verify_payment_token
+
+DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
 
 app = FastAPI(title="AdAgent Studio", version="1.0.0")
 blueprint = Blueprint()
@@ -47,13 +50,14 @@ async def run_campaign(brief: CampaignBrief, request: Request):
     Client must send a valid x402 token in the 'payment-signature' header.
     15 credits per call.
     """
-    # Verify payment token
-    token = request.headers.get("payment-signature", "")
-    if not verify_payment_token(token):
-        raise HTTPException(
-            status_code=402,
-            detail="Payment required. Send x402 token in 'payment-signature' header."
-        )
+    # Verify payment token (skipped in DEV_MODE)
+    if not DEV_MODE:
+        token = request.headers.get("payment-signature", "")
+        if not verify_payment_token(token):
+            raise HTTPException(
+                status_code=402,
+                detail="Payment required. Send x402 token in 'payment-signature' header."
+            )
 
     try:
         # Step 1: Blueprint — LLM designs the agent graph
