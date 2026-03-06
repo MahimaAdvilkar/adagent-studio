@@ -101,8 +101,14 @@ def verify_payment_token(token: str) -> bool:
     Verify + settle an incoming x402 payment token from a client.
     Returns True if valid and credits were burnt, or True in dev if NVM not set.
     """
-    if not NVM_API_KEY or not _NVM_AVAILABLE:
-        return True  # dev mode — no NVM configured yet
+    if DEV_MODE:
+        return True
+    if not NVM_API_KEY:
+        print("[NVM] NVM_API_KEY is missing in non-dev mode.")
+        return False
+    if not _NVM_AVAILABLE:
+        print("[NVM] payments-py SDK is not available in non-dev mode.")
+        return False
     if not token:
         return False
     try:
@@ -180,3 +186,15 @@ def call_vendor(
 
     response.raise_for_status()
     return response.json()
+
+
+def payment_status() -> dict:
+    """Return non-sensitive Nevermined integration status for diagnostics."""
+    return {
+        "dev_mode": DEV_MODE,
+        "sdk_available": _NVM_AVAILABLE,
+        "api_key_set": bool(NVM_API_KEY),
+        "environment": NVM_ENVIRONMENT or "unset",
+        "plan_id_set": bool(NVM_PLAN_ID),
+        "agent_id_set": bool(NVM_AGENT_ID),
+    }

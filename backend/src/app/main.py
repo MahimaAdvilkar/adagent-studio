@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from app.agents.blueprint import Blueprint
 from app.agents.executor import execute_graph
 from app.models.agent_graph import AgentGraph
-from utils.payments import verify_payment_token
+from utils.payments import verify_payment_token, payment_status
 
 DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
 
@@ -89,3 +89,9 @@ async def run_campaign(brief: CampaignBrief, request: Request):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/nvm-status")
+@app.get("/api/nvm-status")
+async def nvm_status():
+    return payment_status()
