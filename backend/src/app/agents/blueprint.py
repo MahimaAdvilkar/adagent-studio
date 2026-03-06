@@ -1,5 +1,6 @@
 from google import genai
 from utils.config import GOOGLE_API_KEY
+from app.models.agent_graph import AgentGraph, AgentNode, NodeType
 import json
 import os
 
@@ -22,7 +23,33 @@ class Blueprint:
                 raw = raw[4:]
         return raw.strip()
 
-    def create(self, brief: dict) -> dict:
+    def _parse_graph(self, raw_data: dict, brief: dict) -> AgentGraph:
+        graph = AgentGraph(
+            campaign_id=raw_data.get("campaign_id", "unknown"),
+            brand=raw_data.get("brand", brief.get("brand", "")),
+            goal=raw_data.get("goal", brief.get("goal", "")),
+            total_budget=raw_data.get("total_budget", brief.get("budget", 0)),
+            execution_order=raw_data.get("execution_order", []),
+        )
+
+        for agent_data in raw_data.get("agents", []):
+            node = AgentNode(
+                id=agent_data["id"],
+                name=agent_data["name"],
+                icon=agent_data.get("icon", ""),
+                level=agent_data.get("level", 1),
+                node_type=NodeType(agent_data.get("node_type", "leaf")),
+                depends_on=agent_data.get("depends_on", []),
+                description=agent_data.get("description", ""),
+                spawns_subagents=agent_data.get("spawns_subagents", False),
+                subgraph_hint=agent_data.get("subgraph_hint", ""),
+                input=brief,
+            )
+            graph.add_node(node)
+
+        return graph
+
+    def create(self, brief: dict) -> AgentGraph:
         system_prompt = self._load_prompt("root_agent_prompt.txt")
         user_message = json.dumps(brief, indent=2)
         full_prompt = f"{system_prompt}\n\nClient Brief:\n{user_message}"
@@ -33,4 +60,6 @@ class Blueprint:
         )
 
         raw = self._strip_fences(response.text.strip())
-        return json.loads(raw)
+        raw_data = json.loads(raw)
+        return self._parse_graph(raw_data, brief)
+
