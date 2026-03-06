@@ -50,3 +50,20 @@ async function postJson(endpoint: string, payload: CampaignBrief): Promise<Campa
 export async function runMindraCampaign(brief: CampaignBrief): Promise<CampaignApiResponse> {
   return postJson("/mindra/run", brief);
 }
+
+export async function runCampaign(brief: CampaignBrief): Promise<CampaignApiResponse> {
+  try {
+    return await runMindraCampaign(brief);
+  } catch (error) {
+    const apiError = error as ApiError;
+    if (apiError.status !== 402 && apiError.status !== 404 && apiError.status !== 500) {
+      throw error;
+    }
+  }
+
+  try {
+    return await postJson("/workflow/preview", brief);
+  } catch {
+    return postJson("/createblueprint", brief);
+  }
+}

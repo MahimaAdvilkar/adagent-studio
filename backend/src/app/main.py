@@ -91,7 +91,7 @@ async def run_campaign(brief: CampaignBrief, request: Request):
     # Verify payment token (skipped in DEV_MODE)
     if not DEV_MODE:
         token = request.headers.get("payment-signature", "")
-        if not verify_payment_token(token):
+        if not verify_payment_token(token, resource_url=str(request.url), http_verb=request.method):
             raise HTTPException(
                 status_code=402,
                 detail="Payment required. Send x402 token in 'payment-signature' header."

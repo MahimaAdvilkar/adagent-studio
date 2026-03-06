@@ -61,12 +61,15 @@ def _transactions(graph: AgentGraph, budget: float) -> tuple[list[dict[str, Any]
 
     for name, keys, amount in vendor_nodes:
         node = _find_node(graph, keys)
-        if node and node.status == AgentStatus.DONE:
+        if node is None:
+            txs.append({"vendor": name, "amount": amount, "status": "Planned"})
+            spend += amount
+        elif node.status == AgentStatus.DONE:
             txs.append({"vendor": name, "amount": amount, "status": "Paid"})
             spend += amount
-        elif node and node.status == AgentStatus.FAILED:
+        elif node.status == AgentStatus.FAILED:
             txs.append({"vendor": name, "amount": 0.0, "status": "Failed"})
-        elif node and node.status == AgentStatus.SKIPPED:
+        elif node.status == AgentStatus.SKIPPED:
             txs.append({"vendor": name, "amount": 0.0, "status": "Skipped"})
         else:
             txs.append({"vendor": name, "amount": 0.0, "status": "Pending"})
@@ -113,6 +116,17 @@ def _switching_signal(graph: AgentGraph) -> tuple[str, str]:
     return "HOLD", "All core agents are healthy."
 
 
+def _trading_signal(switch_state: str, margin: float) -> tuple[str, str]:
+    """
+    Hackathon-friendly BUY/SELL signal derived from ROI + switching.
+    BUY  -> margin is positive and no failing agent.
+    SELL -> margin <= 0 or switching was triggered due to failures.
+    """
+    if switch_state == "SWITCH" or margin <= 0:
+        return "SELL", "Performance or delivery risk detected; reduce spend and reallocate."
+    return "BUY", "Positive margin and stable execution; continue investment."
+
+
 def workflow_preview(brief: dict[str, Any]) -> dict[str, Any]:
     budget = float(brief.get("budget", 15))
     strategy = {
@@ -132,6 +146,7 @@ def workflow_preview(brief: dict[str, Any]) -> dict[str, Any]:
     spend = sum(strategy["budget_split"].values())
     margin = round(budget - spend, 2)
     roi = f"{(margin / spend):.2f}x" if spend > 0 else "—"
+    buy_sell, buy_sell_note = _trading_signal("HOLD", margin)
     return {
         "status": "preview",
         "brand": _to_text(brief.get("brand"), "Unknown brand"),
@@ -151,6 +166,8 @@ def workflow_preview(brief: dict[str, Any]) -> dict[str, Any]:
         ],
         "finance": {"total_spend": round(spend, 2), "margin": margin},
         "metrics": {"roi": roi, "clicks": "—", "conversions": "—"},
+        "buy_sell_signal": buy_sell,
+        "buy_sell_note": buy_sell_note,
         "switch_state": "HOLD",
         "switch_note": "Workflow ready. Run campaign to execute agents.",
         "transaction_count": 5,
@@ -177,6 +194,7 @@ def build_campaign_response(graph: AgentGraph, brief: dict[str, Any]) -> dict[st
             conversions = str(maybe_conv)
 
     switch_state, switch_note = _switching_signal(graph)
+    buy_sell, buy_sell_note = _trading_signal(switch_state, margin)
 
     return {
         "status": "complete",
@@ -190,6 +208,8 @@ def build_campaign_response(graph: AgentGraph, brief: dict[str, Any]) -> dict[st
         "transaction_count": len(transactions),
         "finance": {"total_spend": spend, "margin": margin},
         "metrics": {"roi": roi, "clicks": clicks, "conversions": conversions},
+        "buy_sell_signal": buy_sell,
+        "buy_sell_note": buy_sell_note,
         "switch_state": switch_state,
         "switch_note": switch_note,
         "agents": {

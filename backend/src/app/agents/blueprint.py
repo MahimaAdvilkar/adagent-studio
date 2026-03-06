@@ -1,15 +1,19 @@
-from google import genai
 from utils.config import GOOGLE_API_KEY, MINDRA_CHILD_NODE_ENABLED
 from app.models.agent_graph import AgentGraph, AgentNode, NodeType
 import json
 import os
+
+try:
+    from google import genai
+except Exception:
+    genai = None
 
 PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "prompts")
 
 
 class Blueprint:
     def __init__(self):
-        self.client = genai.Client(api_key=GOOGLE_API_KEY) if GOOGLE_API_KEY else None
+        self.client = genai.Client(api_key=GOOGLE_API_KEY) if (genai and GOOGLE_API_KEY) else None
         self.model = "gemini-2.5-flash"
 
     def _load_prompt(self, filename: str) -> str:
