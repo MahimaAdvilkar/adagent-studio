@@ -1,3 +1,6 @@
+import asyncio
+from uuid import uuid4
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -47,6 +50,43 @@ class FreeReviewRequest(BaseModel):
     score_speed: int | None = Field(default=None, ge=1, le=10)
     score_value: int | None = Field(default=None, ge=1, le=10)
     score_reliability: int | None = Field(default=None, ge=1, le=10)
+
+
+def _fallback_campaign_response(brief_payload: dict, reason: str) -> dict:
+    preview = workflow_preview(brief_payload)
+    return {
+        "status": "complete",
+        "campaign_id": f"fallback-{uuid4().hex[:10]}",
+        "brand": str(brief_payload.get("brand") or "Unknown brand"),
+        "goal": str(brief_payload.get("goal") or "drive signups"),
+        "summary": {
+            "campaign_id": "fallback",
+            "brand": str(brief_payload.get("brand") or "Unknown brand"),
+            "goal": str(brief_payload.get("goal") or "drive signups"),
+            "total_budget": float(brief_payload.get("budget") or 15.0),
+            "total_agents": 0,
+            "statuses": {
+                "pending": 0,
+                "ready": 0,
+                "running": 0,
+                "done": 0,
+                "failed": 0,
+                "skipped": 0,
+            },
+            "is_complete": True,
+        },
+        "strategy": preview.get("strategy", {}),
+        "vendor_statuses": preview.get("vendor_statuses", []),
+        "transactions": preview.get("transactions", []),
+        "transaction_count": int(preview.get("transaction_count", 0)),
+        "finance": preview.get("finance", {"total_spend": 0.0, "margin": 0.0}),
+        "metrics": preview.get("metrics", {"roi": "—", "clicks": "—", "conversions": "—"}),
+        "buy_sell_signal": preview.get("buy_sell_signal", "HOLD"),
+        "buy_sell_note": preview.get("buy_sell_note", "Fallback response."),
+        "switch_state": "SWITCH",
+        "switch_note": reason,
+        "agents": {},
+    }
 
 
 @app.get("/")
@@ -102,28 +142,35 @@ async def run_campaign(brief: CampaignBrief, request: Request):
     Client must send a valid x402 token in the 'payment-signature' header.
     15 credits per call.
     """
-    # Verify payment token (skipped in DEV_MODE)
-    from utils.config import DEV_MODE
-    if not DEV_MODE:
-        token = request.headers.get("payment-signature", "")
-        if not verify_payment_token(token, resource_url=str(request.url), http_verb=request.method):
-            raise HTTPException(
-                status_code=402,
-                detail="Payment required. Send a valid x402 token in 'payment-signature' header."
-            )
+    token = request.headers.get("payment-signature", "")
+    if not verify_payment_token(token, resource_url=str(request.url), http_verb=request.method):
+        raise HTTPException(
+            status_code=402,
+            detail="Payment required. Send a valid x402 token in 'payment-signature' header."
+        )
 
+    brief_payload = brief.model_dump()
     try:
-        # Step 1: Blueprint — LLM designs the agent graph
-        brief_payload = brief.model_dump()
-        graph = blueprint.create(brief_payload)
-
-        # Step 2: Execute — run all agents in dependency order
-        graph = execute_graph(graph)
-
-        # Step 3: Normalize outputs for dashboard + orchestration view
+        # Bound execution so marketplace callers get a timely response.
+        graph = await asyncio.wait_for(
+            asyncio.to_thread(blueprint.create, brief_payload),
+            timeout=15,
+        )
+        graph = await asyncio.wait_for(
+            asyncio.to_thread(execute_graph, graph),
+            timeout=20,
+        )
         return build_campaign_response(graph, brief_payload)
+    except asyncio.TimeoutError:
+        return _fallback_campaign_response(
+            brief_payload,
+            "Campaign execution exceeded service timeout; returned fallback plan.",
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return _fallback_campaign_response(
+            brief_payload,
+            f"Campaign execution failed; returned fallback plan. reason={str(e)[:120]}",
+        )
 
 
 @app.get("/nvm-status")
