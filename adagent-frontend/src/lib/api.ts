@@ -7,11 +7,9 @@ export type CampaignBrief = {
 
 export type CampaignApiResponse = Record<string, unknown>;
 
-type ApiError = Error & { status?: number };
-
 const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ||
-  (import.meta.env.DEV ? "http://localhost:8000" : "/api");
+  (import.meta.env.DEV ? "http://127.0.0.1:8000" : "/api");
 
 const PAYMENT_SIGNATURE =
   (import.meta.env.VITE_X402_PAYMENT_SIGNATURE as string | undefined)?.trim() || "";
@@ -50,18 +48,5 @@ export async function runMindraCampaign(brief: CampaignBrief): Promise<CampaignA
 }
 
 export async function runCampaign(brief: CampaignBrief): Promise<CampaignApiResponse> {
-  try {
-    return await runMindraCampaign(brief);
-  } catch (error) {
-    const apiError = error as ApiError;
-    if (apiError.status !== 402 && apiError.status !== 404 && apiError.status !== 500) {
-      throw error;
-    }
-  }
-
-  try {
-    return await postJson("/workflow/preview", brief);
-  } catch {
-    return postJson("/createblueprint", brief);
-  }
+  return postJson("/run-campaign", brief);
 }

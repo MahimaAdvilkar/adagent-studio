@@ -55,7 +55,6 @@ class Blueprint:
             self._inject_mindra_content_child(graph)
         if MINDRA_TWITTER_AGENT_ENABLED:
             self._inject_mindra_twitter_ad_copy_child(graph)
-                self._inject_mindra_twitter_ad_copy_child(graph)
             self._inject_mindra_twitter_child(graph)
 
         return graph
@@ -115,6 +114,7 @@ class Blueprint:
             low = f"{node.id} {node.name}".lower()
             if "analytics" in low and child_node_id not in node.depends_on:
                 node.depends_on.append(child_node_id)
+
     def _inject_mindra_twitter_ad_copy_child(self, graph: AgentGraph) -> None:
         """Create a dedicated Twitter ad-copy node based on generated creative content."""
         creative_node = None
@@ -138,7 +138,7 @@ class Blueprint:
         if copy_node is None:
             copy_node = AgentNode(
                 id=copy_node_id,
-                    depends_on=[dependency_id],
+                name="Twitter Ad Copy Agent",
                 icon="AI",
                 level=3,
                 node_type=NodeType.LEAF,
@@ -149,8 +149,8 @@ class Blueprint:
                 ),
                 input=creative_node.input,
             )
-                if dependency_id not in twitter_node.depends_on:
-                    twitter_node.depends_on.append(dependency_id)
+            graph.add_node(copy_node)
+        else:
             copy_node.name = "Twitter Ad Copy Agent"
             copy_node.level = max(3, copy_node.level)
             if creative_node.id not in copy_node.depends_on:

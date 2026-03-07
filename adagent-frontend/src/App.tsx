@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { runMindraCampaign, type CampaignApiResponse, type CampaignBrief } from "./lib/api";
+import { runCampaign, type CampaignApiResponse, type CampaignBrief } from "./lib/api";
 
 type VendorStatusItem = {
   label: string;
@@ -886,7 +886,7 @@ export default function App() {
     setError(null);
 
     try {
-      const result = await runMindraCampaign(brief);
+      const result = await runCampaign(brief);
       setResponseData(result);
     } catch (requestError) {
       const message = requestError instanceof Error ? requestError.message : "Failed to run campaign.";
@@ -1008,7 +1008,7 @@ export default function App() {
               )}
 
               <div className="rounded-xl bg-gray-50 px-3 py-2 text-xs text-gray-600 ring-1 ring-gray-200">
-                Next: this button calls <span className="font-medium">/mindra/run</span> and streams orchestration state.
+                Next: this button calls <span className="font-medium">/run-campaign</span> and streams orchestration state.
               </div>
             </div>
           </div>
